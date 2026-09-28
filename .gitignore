@@ -69,6 +69,7 @@ web_modules/
 .env
 .env.*
 !.env.example
+!.env.lightsail.example
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -141,3 +142,23 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local secrets and runtime data
+.secrets/
+data/
+downloads/
+*.sqlite3
+
+# Editor / OS
+.idea/
+.DS_Store
+Thumbs.db
