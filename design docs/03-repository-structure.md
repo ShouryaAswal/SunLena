@@ -19,10 +19,10 @@ sunlena/
 │       ├── Dockerfile
 │       └── pyproject.toml
 ├── packages/api-client/               # optional generated typed client
-├── infra/{compose,lightsail,terraform}/
+├── infra/{compose,ec2,terraform}/
 ├── ops/{caddy,scripts,runbooks}/
 ├── .github/workflows/                 # CI/CD after releases are repeatable
-├── compose.yaml, compose.lightsail.yaml, .env.example, env.lightsail.example
+├── compose.yaml, compose.ec2.yaml, .env.example, env.ec2.example
 ├── .dockerignore, .gitignore
 ├── README.md
 └── SECURITY.md

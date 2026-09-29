@@ -1,7 +1,7 @@
 # 2. Architecture and decisions
 
 ## Initial shape: modular monolith
-Build one React app, one FastAPI app with explicit domain modules, PostgreSQL, and a separately invokable conversion worker. Run locally with Docker Compose. First Lightsail deployment is a single Linux VM running Compose behind a reverse proxy. This is simple to learn and gives later extraction seams; it is one failure domain, not high availability.
+Build one React app, one FastAPI app with explicit domain modules, PostgreSQL, and a separately invokable conversion worker. Run locally with Docker Compose. First AWS deployment is one EC2 `m7i-flex.large` host running the same Compose services behind Caddy. This is a low-complexity learning deployment with clear future extraction seams; it is one failure domain, not high availability. The instance size is a reasonable starting point for roughly 100 occasional family/friend users if media work remains sequential, but it is not proof of capacity or zero cost.
 
 ```mermaid
 flowchart LR
@@ -22,11 +22,12 @@ Logical modules: identity, catalog, search, playlists, discovery, reviews, jobs,
 Each deployed service adds contracts, network failure, inter-service auth, deployments, logs/health checks, version compatibility and operations. For a tiny team and ~100 known users, that burden is unlikely to pay back. Conversion is the first separate process because resource profile/failure behavior differ. Extract others only when measured scaling, reliability or team ownership justifies it.
 
 ## First deployment
-- One Lightsail Linux instance; Docker Engine + Compose.
-- Caddy reverse proxy for automatic Let's Encrypt on one host, or paid Lightsail load balancer for managed TLS.
+- One EC2 `m7i-flex.large` Linux instance in Mumbai (`ap-south-1`) as the initial measured starting point; Docker Engine + Compose.
+- One custom VPC, one public subnet in one Availability Zone, an Internet Gateway, and one route table with `0.0.0.0/0` to the gateway. No NAT Gateway, ALB, or RDS at this stage.
+- Caddy reverse proxy for automatic Let's Encrypt TLS. It is the only container publishing host ports.
 - React static assets, FastAPI API, PostgreSQL, separate worker, private persistent volume.
 - One conversion at a time; two active jobs per user; duration and file-size limits.
-- Static IP; only 80/443 public and SSH restricted; DB/app ports private.
+- Elastic IP (stable DNS; billed as a public IPv4) or a replaceable auto-assigned public IP; only 80/443 public. Prefer SSM Session Manager and no inbound SSH; if SSH is temporarily needed, restrict TCP 22 to the operator's `/32` and remove the rule after use. DB/app ports remain private.
 - Encrypted DB backup, rotation, restore rehearsal, disk limits and log rotation.
 
 One host/disk is one failure domain. Backups reduce data loss but do not provide HA. Do not expose Docker socket, PostgreSQL or worker management publicly.
@@ -34,8 +35,8 @@ One host/disk is one failure domain. Backups reduce data loss but do not provide
 ## Evolution path
 1. Separate worker process/container on same host.
 2. Durable SQS queue, job state in PostgreSQL/DynamoDB, private S3 output with expiring URLs.
-3. Frontend on private S3 + CloudFront OAC; API remains Lightsail.
-4. Split API/worker hosting: Lightsail instances, ECS on EC2, or Fargate, based on measured load and budget.
+3. Frontend on private S3 + CloudFront OAC; API remains EC2.
+4. Split API/worker hosting: ECS on EC2 or Fargate, based on measured load and budget.
 5. Add managed DB, Secrets Manager, ECR, CloudWatch, Terraform/CDK and CI/CD when justified.
 
 Future target is not the first deployment and may exceed budget: S3 private origin + CloudFront, API in ECS/EC2, worker consuming SQS, private S3 media, least-privilege IAM, CloudWatch and secrets store.
@@ -51,7 +52,7 @@ Future target is not the first deployment and may exceed budget: S3 private orig
 
 **Editing:** authenticated request identifies an owned completed media job; API bounds source bytes and transform values → pydub/FFmpeg reads the file → trim, speed, low/high band gain, volume, fades → output format/bitrate → returns a new file to the browser. Keep the original unchanged. A future asynchronous editor job can be added only if synchronous render latency proves problematic.
 
-Provider outage returns partial results. A worker restart requeues interrupted rows and removes orphan scratch directories. One worker limits simultaneous FFmpeg/YouTube activity on Lightsail. API admission caps each file at 150 MB, a listener's stored files at 500 MB, and active jobs at two; monitor free disk and clean stale failed job records before a wider launch. Never fabricate progress.
+Provider outage returns partial results. A worker restart requeues interrupted rows and removes orphan scratch directories. One worker limits simultaneous FFmpeg/YouTube activity on EC2; keep it at one because `m7i-flex.large` offers 2 vCPU with 40% baseline per vCPU and flexible bursting rather than guaranteed sustained full CPU. API admission caps each file at 150 MB, a listener's stored files at 500 MB, and active jobs at two; monitor RAM, CPU, free disk and clean stale failed job records before a wider launch. Never fabricate progress. M7i-flex specs are described by [AWS](https://aws.amazon.com/ec2/instance-types/m7i/).
 
 For a future private static frontend, use [CloudFront Origin Access Control](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html) with an S3 REST origin. CloudFront custom HTTPS uses an ACM certificate in `us-east-1`; see [CloudFront certificate requirements](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cnames-and-https-requirements.html).
 

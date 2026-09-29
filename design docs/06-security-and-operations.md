@@ -4,7 +4,9 @@
 - Verify token signature, issuer, audience, expiry and subject; use stable provider subject, not email.
 - Enforce authorization in backend use cases; test cross-account playlist/job access.
 - Bound inputs, review lengths, job duration/output, URL types and rates; parameterize DB queries.
-- Public firewall only 80/443; restrict SSH; DB/app ports private.
+- EC2 security group inbound: TCP 80 and 443 from the internet; no 5173/8000/5432/Redis/worker ports. Prefer SSM Session Manager with an EC2 instance profile granting `AmazonSSMManagedInstanceCore`, so there is no inbound SSH rule. If SSH is a temporary fallback, allow TCP 22 only from the administrator's current public IPv4 `/32`, then remove it. Keep outbound HTTPS/DNS available for OS updates, image pulls, Firebase, providers and certificate renewal.
+- Place the host in a public subnet with an Internet Gateway route; do not add a NAT Gateway for this one-host design. The instance needs a public IPv4 for inbound HTTPS and outbound updates. An Elastic IP gives stable Name.com DNS but has a separate hourly public-IPv4 charge; a dynamic address is cheaper operationally but changes after stop/start.
+- One EC2 instance, one subnet/AZ and one EBS root/data disk are a single failure domain. Encrypt EBS, use least-privilege IAM, keep PostgreSQL/media in Docker volumes not public buckets, and create an off-host backup plan before inviting users.
 - Non-root containers, pinned deps/images, patch cadence, no Docker socket.
 - Secrets never in Git/images/build args/frontend/logs/shell history; rotate exposure.
 - Restrictive CORS (not auth), CSP/HSTS/frame/content-type headers; CSRF controls for cookie sessions.

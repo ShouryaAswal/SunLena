@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-sunlena}
       POSTGRES_USER: ${POSTGRES_USER:-sunlena}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the Lightsail .env file}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the EC2 .env file}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -25,12 +25,12 @@ services:
       SUNLENA_ENVIRONMENT: production
       SUNLENA_LOG_LEVEL: INFO
       SUNLENA_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-sunlena}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB:-sunlena}
-      SUNLENA_FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?Set FIREBASE_PROJECT_ID in the Lightsail .env file}
+      SUNLENA_FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?Set FIREBASE_PROJECT_ID in the EC2 .env file}
       SUNLENA_FIREBASE_SERVICE_ACCOUNT_PATH: /run/secrets/firebase-admin.json
       SUNLENA_APPLE_SEARCH_COUNTRY: ${APPLE_SEARCH_COUNTRY:-IN}
       SUNLENA_MEDIA_ROOT: /var/lib/sunlena/media
       SUNLENA_MEDIA_MAX_USER_BYTES: 524288000
-      SUNLENA_MEDIA_SIGNING_SECRET: ${SUNLENA_MEDIA_SIGNING_SECRET:?Set SUNLENA_MEDIA_SIGNING_SECRET in the Lightsail .env file}
+      SUNLENA_MEDIA_SIGNING_SECRET: ${SUNLENA_MEDIA_SIGNING_SECRET:?Set SUNLENA_MEDIA_SIGNING_SECRET in the EC2 .env file}
     volumes:
       - ./.secrets/firebase-admin.json:/run/secrets/firebase-admin.json:ro
       - media_data:/var/lib/sunlena/media
@@ -80,10 +80,10 @@ services:
       context: ./apps/web
       target: production
       args:
-        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:?Set VITE_FIREBASE_API_KEY in the Lightsail .env file}
-        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:?Set VITE_FIREBASE_AUTH_DOMAIN in the Lightsail .env file}
-        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:?Set VITE_FIREBASE_PROJECT_ID in the Lightsail .env file}
-        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:?Set VITE_FIREBASE_APP_ID in the Lightsail .env file}
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:?Set VITE_FIREBASE_API_KEY in the EC2 .env file}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:?Set VITE_FIREBASE_AUTH_DOMAIN in the EC2 .env file}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:?Set VITE_FIREBASE_PROJECT_ID in the EC2 .env file}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:?Set VITE_FIREBASE_APP_ID in the EC2 .env file}
     restart: unless-stopped
     depends_on:
       api:

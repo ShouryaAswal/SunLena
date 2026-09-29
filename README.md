@@ -8,7 +8,7 @@ The current flows include Apple catalog search/previews, Firebase Google sign-in
 
 ## Start locally
 
-SunLeo's environment entries have been carried into this checkout's ignored `.env`, with Firebase web keys mapped to SunLena's `VITE_FIREBASE_*` names. The Firebase Admin credential was copied to ignored `.secrets/firebase-admin.json`; its project ID matches the client config. Credential values are never included in this README. See the [full local-to-Lightsail walkthrough](design%20docs/10-local-and-lightsail-walkthrough.md) for setup, existing-container guidance, DNS, TLS, and deployment steps.
+SunLeo's environment entries have been carried into this checkout's ignored `.env`, with Firebase web keys mapped to SunLena's `VITE_FIREBASE_*` names. The Firebase Admin credential was copied to ignored `.secrets/firebase-admin.json`; its project ID matches the client config. Credential values are never included in this README. See the [full local-to-EC2 walkthrough](design%20docs/10-local-and-ec2-walkthrough.md) for setup, existing-container guidance, DNS, TLS, and deployment steps.
 
 Requirements: Docker Desktop with Compose v2.
 
@@ -33,30 +33,28 @@ Without Firebase settings, catalog search and Apple preview playback work, while
 
 Stop with `Ctrl+C`, then run `docker compose down`. Use `docker compose down -v` only when you intentionally want to delete the local PostgreSQL volume and its data.
 
-## First Lightsail deployment
+## First EC2 deployment
 
-A production Compose file and Caddy HTTPS configuration are included. On the Lightsail VM, copy the repo, then:
+The initial AWS target is one EC2 `m7i-flex.large` instance in Mumbai, running the production Compose stack behind Caddy. The host has 2 vCPU and 8 GiB RAM; keep media conversion concurrency at one and measure CPU, RAM and disk before inviting the full group. This is a single failure domain with no automatic failover. A current public price-list index puts on-demand compute around $73.55/month for 730 hours, before disk, public IPv4, transfer, snapshots and tax; verify with AWS Pricing Calculator. $100 of new-account credits would cover only about 1.36 months of compute at that estimate. So EC2 is a learning/flexibility choice while credits last, not the cheaper long-term option versus a $24 Lightsail plan.
+
+**Free Tier eligibility is account-date dependent.** AWS currently lists `m7i-flex.large` as eligible for accounts created on/after July 15, 2025 under a credit-based program lasting at most six months or until credits run out. Older accounts have different eligible instance sizes. Confirm the account date, current credits, AMI/region eligibility and estimated bill in AWS Billing before provisioning. Public IPv4, EBS, snapshots, transfer and domain renewal can add costs; billing alerts do not cap charges. Read the [EC2, VPC, security-group, domain and cost runbook](design%20docs/08-ec2-domain-runbook.md) before launch.
+
+The production files are `compose.ec2.yaml` and `env.ec2.example`. On the EC2 host:
 
 ```bash
-cp env.lightsail.example .env
+cp env.ec2.example .env
 mkdir -p .secrets
+chmod 700 .secrets
+# Fill in .env; copy the matching Firebase Admin JSON into .secrets/firebase-admin.json.
+sudo docker compose -f compose.ec2.yaml config --quiet
+sudo docker compose -f compose.ec2.yaml up -d --build
+sudo docker compose -f compose.ec2.yaml ps
 ```
 
-Edit `.env` with your Name.com hostname, Firebase web config, Firebase project ID, and a strong base64url PostgreSQL password. Put the Firebase Admin service-account JSON at `.secrets/firebase-admin.json` with read-only permissions. In Name.com DNS, create an **A** record with host `sunlena` (or your chosen subdomain) and answer equal to the Lightsail static IPv4. In Firebase Authentication, add the public hostname as an authorized domain and enable Google sign-in.
-
-Allow only TCP 80 and 443 publicly, plus SSH restricted to your IP. Then run:
-
-```bash
-docker compose -f compose.lightsail.yaml up -d --build
-docker compose -f compose.lightsail.yaml ps
-docker compose -f compose.lightsail.yaml logs -f api caddy
-```
-
-Caddy obtains and renews HTTPS certificates after DNS resolves. Verify `https://sunlena.your-domain`. The API, database, and worker do not publish host ports. This is still one VM: monitor disk and AWS spend, and plan separate PostgreSQL/media backups. AWS runtime and domain renewal can be billable; billing alerts do not cap spend. See [the Lightsail runbook](design%20docs/08-lightsail-domain-runbook.md) for the detailed DNS and TLS steps.
-
+Set up one custom VPC/public subnet/Internet Gateway, allow inbound TCP 80/443 only, and prefer SSM Session Manager without an inbound SSH rule. Point a Name.com `A` record (for example host `sunlena`) at the EC2 Elastic IP, or update it when a dynamic IP changes. Caddy obtains HTTPS after DNS resolves. See the [full local-to-EC2 walkthrough](design%20docs/10-local-and-ec2-walkthrough.md) for every step.
 ## Documentation
 
-Start with [design docs/README.md](design%20docs/README.md) for product scope, architecture, UI direction, data/API plan, security, staged deployment, and Lightsail/Name.com setup.
+Start with [design docs/README.md](design%20docs/README.md) for product scope, architecture, UI direction, data/API plan, security, staged deployment, and EC2/Name.com setup.
 
 ## Principles
 
