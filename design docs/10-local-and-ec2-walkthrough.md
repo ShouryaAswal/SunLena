@@ -33,14 +33,14 @@ docker info
 
 ### 2. Confirm local-only settings and start the stack
 
-The API and worker images install Python dependencies during the Docker image build from `apps/api/pyproject.toml`. `yt-dlp` has a minimum version and no upper bound, so a fresh dependency install resolves the newest published version satisfying that requirement. Starting an already-built container does not run pip again, and Docker may reuse its cached dependency layer. This is intentional: changing dependencies on every container start makes deployments unpredictable. When you specifically want to refresh yt-dlp and the Python packages, rebuild those images without cache, then start the stack:
+The API and worker images install Python dependencies during the Docker image build from `apps/api/pyproject.toml`. `yt-dlp[default]` installs the matching `yt-dlp-ejs` challenge scripts, Deno is installed in the image, and FFmpeg is the system executable. YouTube extraction needs both EJS scripts and a supported JavaScript runtime for full support. `yt-dlp` has a minimum version and no upper bound, so a fresh dependency install resolves the newest published version satisfying that requirement. Starting an already-built container does not run pip again, and Docker may reuse its cached dependency layer. This is intentional: changing dependencies on every container start makes deployments unpredictable. When you specifically want to refresh yt-dlp and the Python packages, rebuild those images without cache, then recreate the stack:
 
 ```powershell
-docker compose build --no-cache api worker
-docker compose up -d
+docker-compose build --no-cache api worker
+docker-compose up -d --no-deps api worker
 ```
 
-The first build takes longer because it refreshes the base OS package index, installs FFmpeg, and resolves Python dependencies again. Review dependency changes before deploying them to EC2.
+The first build takes longer because it refreshes the base OS package index, installs FFmpeg and Deno, and resolves Python dependencies again. Review dependency changes before deploying them to EC2. The repository pins Deno's version in `apps/api/Dockerfile`; update that build argument deliberately when moving to a newer Deno release.
 
 The `.env` and Firebase JSON have already been copied into this checkout. Check their presence without printing their contents:
 
