@@ -22,6 +22,7 @@ SunLena is a polished music discovery and personal-library site for family and f
 
 ## Current product scope
 - Responsive home/search with title/artist search, Apple preview samples, and clear catalog attribution.
+- Advanced search explicitly submits the chosen song, artist, or album field. Submitting a search from any section switches the view to Discover and displays the results there.
 - One-tap Quick download for a searched track. SunLena searches YouTube using title + artist, downloads one candidate via yt-dlp, and processes it with FFmpeg. The Downloads screen shows the found source title so the user can inspect the match.
 - Private recent-download library with durable job state, progress, status/error, play, browser download and delete actions.
 - Music player with play/pause, seek, previous/next, shuffle, sequential playlist playback, Apple preview fallback and downloaded-file playback.
@@ -38,7 +39,7 @@ SunLena is a polished music discovery and personal-library site for family and f
 
 Later: durable per-user storage quotas and cleanup UI, source candidate chooser, job cancellation/retries, preview/download matching quality signals, collaborative playlists, follows, import/export, notifications, object storage/CDN and IaC/CI/CD.
 
-Not initially: a public streaming catalog, arbitrary URL ingestion, public social graph/messaging, ads/subscriptions, Kubernetes/service mesh/multi-region, or immediate serverless conversion.
+Not initially: a public streaming catalog, arbitrary URL ingestion (including direct YouTube-link downloading), public social graph/messaging, ads/subscriptions, Kubernetes/service mesh/multi-region, or immediate serverless conversion. Revisit URL ingestion only for authorized sources after adding a source allowlist, rights checks and SSRF protections.
 
 ## Zero-cost constraint
 Treat zero spend as a budget target with a stop condition. A domain may have renewal costs even if initially bundled; VM, snapshots, storage, transfer and optional services may be charged. Verify current pricing and terms. Before AWS resources, estimate region-specific monthly cost, set a budget alert, record a maximum acceptable spend, and know how to delete it. If the limit is literally ₹0, stay local or use a verified free offer with limits understood. AWS alerts notify; they do not enforce a hard cap.

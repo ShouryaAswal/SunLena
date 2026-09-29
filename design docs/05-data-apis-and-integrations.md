@@ -10,7 +10,7 @@ OAuth: separate dev/prod clients; exact origins/callbacks; authorized domain; ru
 ## Provider adapters
 - Apple/iTunes Search: candidate metadata/artwork search based on SunLeo; verify current terms, attribution, limits and caching.
 - Apple `previewUrl`: short in-browser preview when one is returned; no full-catalog audio proxying.
-- YouTube via yt-dlp: one title + artist `ytsearch1` lookup after an explicit Quick download action. Do not accept arbitrary browser-provided URLs. Show the actual matched source title in the user's download history.
+- YouTube via yt-dlp: one title + artist `ytsearch1` lookup after an explicit Quick download action. Direct YouTube-link download is not supported. Do not accept arbitrary browser-provided URLs; any future authorized-source import needs an allowlist, rights safeguards and SSRF defenses. Show the actual matched source title in the user's download history.
 - Last.fm: optional future enrichment/artwork/tags; legacy API keys remain unused unless an adapter is implemented.
 - Discovery begins as transparent tags/curation, not an unsupported personalization claim.
 
@@ -55,7 +55,7 @@ All routes `/api/v1`; search public, writes/private data authenticated.
 Use cursor pagination, size limits, stable errors and backend ownership checks. Never expose private email/playlists publicly.
 
 ## Search semantics
-Search without login, with IP/provider abuse controls. Debounce/cancel stale requests. Dedupe by provider IDs and cautious title/artist/duration similarity; do not merge distinct recordings silently. Preserve source display values. Cache only within terms. Mood starts as curated tags/explicit filters, not psychological certainty. Personalization needs opt-in interaction data and measurable value.
+Search without login, with IP/provider abuse controls. Debounce/cancel stale requests. Song, artist and album filters map to the provider's corresponding search attribute and are passed explicitly on submit; the API also enforces the chosen field on normalized results if the provider ignores the attribute. Results always switch the app view to Discover. Dedupe by provider IDs and cautious title/artist/duration similarity; do not merge distinct recordings silently. Preserve source display values. Cache only within terms. Mood starts as curated tags/explicit filters, not psychological certainty. Personalization needs opt-in interaction data and measurable value.
 
 ## Media workflow and limits
 The browser can only request a download for a catalog `track_id`; it cannot submit a URL for the worker to fetch. The worker constructs `ytsearch1:{title} {artist}`, limits the source to 30 minutes and 150 MB, and processes one job at a time on the initial Lightsail host. An account may have at most two queued/running jobs. The temporary download is inside a per-user directory and is moved to a UUID-named private file; user-facing names are sanitized. A worker restart requeues rows left running. Keep media volume private and share it only with API/worker containers.

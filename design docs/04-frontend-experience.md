@@ -12,7 +12,7 @@ Aim for premium music-editorial restraint: space, excellent typography, small pa
 - Semantic tokens make dark mode possible later without rewriting components.
 
 ## Home
-Compact brand/navigation/account header; prominent title/artist search; recent activity only when meaningful; saved playlist area/create action; source-labelled discovery rows; advanced filters/mood as secondary actions. Search rows provide sample preview, reviews, a playlist picker and explicit Quick download. Reserve image dimensions, show useful skeletons, and make first interaction fast.
+Compact brand/navigation/account header; prominent title/artist search; recent activity only when meaningful; saved playlist area/create action; source-labelled discovery rows; advanced filters/mood as secondary actions. Advanced search provides a clear “Search this field” action for song/artist/album filters. Any search submitted while viewing Downloads or Studio switches to Discover and shows its results there. Search rows provide sample preview, reviews, a playlist picker and explicit Quick download. Reserve image dimensions, show useful skeletons, and make first interaction fast.
 
 ## Screens/states
 - Search: persistent query, filters in drawer/dialog, source labels, careful dedupe, correction guidance, partial-outage state.

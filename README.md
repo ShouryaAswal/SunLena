@@ -63,4 +63,4 @@ Start with [design docs/README.md](design%20docs/README.md) for product scope, a
 - Start as a modular monolith plus a separate worker process, not a fleet of microservices.
 - Do not commit secrets or user media.
 - Public AWS hosting is not guaranteed to cost zero; check current pricing before provisioning.
-- The media worker only searches by a catalog track's title/artist; do not expose arbitrary URL download routes or the private media volume.
+- The media worker only searches by a catalog track's title/artist; direct YouTube-link downloading and arbitrary URL routes are not supported. Do not expose arbitrary URL download routes or the private media volume.

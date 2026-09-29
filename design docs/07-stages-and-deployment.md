@@ -2,7 +2,7 @@
 
 One major concept per stage. Check current regional pricing before provisioning; do not invent estimates.
 
-**Progress:** The repository now has a local Compose stack and a first media workflow: Apple previews, Firebase-protected yt-dlp/FFmpeg downloads, persistent progress jobs, private files, playlist/player controls, and a bounded audio editor. Stage 2 still needs live runtime validation, parity review, report/moderation and account lifecycle work. See the local-to-Lightsail walkthrough for commands.
+**Progress:** The repository now has a local Compose stack and a first media workflow: Apple previews, Firebase-protected yt-dlp/FFmpeg downloads, persistent progress jobs, private files, playlist/player controls, and a bounded audio editor. Search submits the selected advanced field and routes results to Discover from every section. Direct YouTube-link ingestion is excluded from this stage. Stage 2 still needs live runtime validation, parity review, report/moderation and account lifecycle work. See the local-to-Lightsail walkthrough for commands.
 
 ## Stage 0 — Requirements/local foundation
 **Learn:** requirements, repo boundaries, contracts, design tokens. Inspect SunLeo and make parity matrix; build React shell, FastAPI skeleton/health, typed client, config validation. **Done:** shell works against stub API; no production secrets. **Cloud:** $0.

@@ -136,6 +136,7 @@ export default function HomePage() {
     controller.current?.abort()
     controller.current = new AbortController()
     setQuery(clean)
+    setActiveTab('discover')
     setLoading(true)
     setSearchError('')
     setResponse(null)
@@ -152,7 +153,7 @@ export default function HomePage() {
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    void runSearch(query)
+    void runSearch(query, searchField)
   }
 
   async function handleSignIn() {
@@ -412,7 +413,7 @@ export default function HomePage() {
             <button type="submit" aria-label="Search music" disabled={loading}><ArrowRight size={20} /></button>
           </form>
           <div className="search-underbar"><button className="advanced-toggle" type="button" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((open) => !open)}>{advancedOpen ? 'Hide search options' : 'Advanced search'} <span>{advancedOpen ? '−' : '+'}</span></button><p className="search-hint">Search Apple’s music catalog. No sign-in needed.</p></div>
-          {advancedOpen && <div className="advanced-search"><label htmlFor="search-field">Search in</label><select id="search-field" value={searchField} onChange={(event) => setSearchField(event.target.value)}><option value="all">Song, artist, or album</option><option value="song">Song title</option><option value="artist">Artist</option><option value="album">Album</option></select><span>Explicit results are filtered out for family-friendly browsing.</span></div>}
+          {advancedOpen && <div className="advanced-search"><label htmlFor="search-field">Search in</label><select id="search-field" value={searchField} onChange={(event) => setSearchField(event.target.value)}><option value="all">Song, artist, or album</option><option value="song">Song title</option><option value="artist">Artist</option><option value="album">Album</option></select><span>Explicit results are filtered out for family-friendly browsing.</span><button className="advanced-submit" type="button" disabled={loading || !query.trim()} onClick={() => void runSearch(query, searchField)}>Search this field <ArrowRight size={14} /></button></div>}
           </div>
         <div className="hero-art" aria-hidden="true">
           <div className="orb orb-one" /><div className="orb orb-two" /><div className="orb orb-three" />

@@ -41,11 +41,11 @@ One host/disk is one failure domain. Backups reduce data loss but do not provide
 Future target is not the first deployment and may exceed budget: S3 private origin + CloudFront, API in ECS/EC2, worker consuming SQS, private S3 media, least-privilege IAM, CloudWatch and secrets store.
 
 ## Flows
-**Search:** browser → `/api/v1/search` → provider adapters with timeouts → normalize/merge/cache permitted data → partial results and source status. No login; bounded inputs/results/rate.
+**Search:** browser → `/api/v1/search` → provider adapters with timeouts → normalize/merge/cache permitted data → partial results and source status. No login; bounded inputs/results/rate. The search form passes its selected song/artist/album filter; after submission, the UI switches to Discover so results remain visible regardless of where search began.
 
 **Authenticated write:** browser sends identity token → API validates signature, issuer, audience, expiry and stable subject → maps internal user → enforces ownership in service. Never trust browser-supplied user ID.
 
-**Download:** the signed-in user selects a catalog track and taps Quick download → API creates a `media_jobs` row with owner and track foreign keys → worker claims one row with PostgreSQL `FOR UPDATE SKIP LOCKED` → yt-dlp resolves `ytsearch1:title artist` and runs FFmpeg audio extraction → worker updates progress/status → output goes to the owner's directory on a private named volume → owner polls and may play, download, edit or delete it. No browser-supplied URL is sent to yt-dlp. The first candidate can be a mismatch; expose its YouTube title and let the user delete it.
+**Download:** the signed-in user selects a catalog track and taps Quick download → API creates a `media_jobs` row with owner and track foreign keys → worker claims one row with PostgreSQL `FOR UPDATE SKIP LOCKED` → yt-dlp resolves `ytsearch1:title artist` and runs FFmpeg audio extraction → worker updates progress/status → output goes to the owner's directory on a private named volume → owner polls and may play, download, edit or delete it. No browser-supplied URL is sent to yt-dlp. Direct YouTube-link ingestion is outside the current scope; arbitrary URLs introduce rights/terms and server-side request forgery risks. The first candidate can be a mismatch; expose its YouTube title and let the user delete it.
 
 **Playback:** iTunes `previewUrl` supports catalog previews without downloading. Playlist playback resolves a user's saved file first, then falls back to the short Apple preview. Downloaded media streams through an owner-authorized API route. The browser sends Firebase bearer auth and plays the returned Blob URL; do not make the media volume public.
 

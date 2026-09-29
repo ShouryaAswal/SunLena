@@ -1,4 +1,5 @@
 import asyncio
+import re
 import time
 from collections import deque
 from typing import Any
@@ -18,6 +19,10 @@ _CACHE_CAPACITY = 256
 _search_cache: dict[tuple[str, str, int], tuple[float, list[dict[str, Any]]]] = {}
 _request_times: deque[float] = deque()
 _request_lock = asyncio.Lock()
+
+
+def _normalized_terms(value: str) -> list[str]:
+    return re.findall(r"\w+", value.casefold())
 
 
 async def _reserve_provider_request() -> None:
@@ -51,7 +56,13 @@ async def search_apple(
         return cached[1]
     await _reserve_provider_request()
     async with httpx.AsyncClient(timeout=httpx.Timeout(4.0, connect=2.0)) as client:
-        params = {"term": query, "entity": "song", "limit": limit, "country": settings.apple_search_country}
+        params = {
+            "term": query,
+            "media": "music",
+            "entity": "song",
+            "limit": limit,
+            "country": settings.apple_search_country,
+        }
         if field:
             params["attribute"] = field
         if exclude_explicit:
@@ -80,6 +91,19 @@ async def search_apple(
                 "provider": "apple",
             }
         )
+    # Enforce the selected field locally as well. Some provider responses may
+    # ignore `attribute`; advanced search must never silently degrade to "all".
+    field_names = {"songTerm": "title", "artistTerm": "artist", "albumTerm": "album"}
+    selected_name = field_names.get(field or "")
+    if selected_name:
+        query_terms = _normalized_terms(query)
+        results = [
+            result for result in results
+            if query_terms and all(
+                term in " ".join(_normalized_terms(str(result.get(selected_name) or "")))
+                for term in query_terms
+            )
+        ]
     if len(_search_cache) >= _CACHE_CAPACITY:
         oldest_key = min(_search_cache, key=lambda item: _search_cache[item][0])
         del _search_cache[oldest_key]
