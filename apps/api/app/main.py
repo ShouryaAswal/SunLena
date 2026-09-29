@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.modules.catalog.router import router as catalog_router
 from app.modules.identity.router import router as identity_router
+from app.modules.media.router import router as media_router
 from app.modules.playlists.router import router as playlists_router
 from app.modules.reviews.router import router as reviews_router
 from app.modules.search.router import router as search_router
@@ -26,6 +27,7 @@ app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(identity_router, prefix="/api/v1")
 app.include_router(playlists_router, prefix="/api/v1")
 app.include_router(reviews_router, prefix="/api/v1")
+app.include_router(media_router, prefix="/api/v1")
 
 
 @app.get("/health/live", tags=["health"])

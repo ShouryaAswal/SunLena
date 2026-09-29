@@ -28,8 +28,12 @@ services:
       SUNLENA_FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?Set FIREBASE_PROJECT_ID in the Lightsail .env file}
       SUNLENA_FIREBASE_SERVICE_ACCOUNT_PATH: /run/secrets/firebase-admin.json
       SUNLENA_APPLE_SEARCH_COUNTRY: ${APPLE_SEARCH_COUNTRY:-IN}
+      SUNLENA_MEDIA_ROOT: /var/lib/sunlena/media
+      SUNLENA_MEDIA_MAX_USER_BYTES: 524288000
+      SUNLENA_MEDIA_SIGNING_SECRET: ${SUNLENA_MEDIA_SIGNING_SECRET:?Set SUNLENA_MEDIA_SIGNING_SECRET in the Lightsail .env file}
     volumes:
       - ./.secrets/firebase-admin.json:/run/secrets/firebase-admin.json:ro
+      - media_data:/var/lib/sunlena/media
     depends_on:
       database:
         condition: service_healthy
@@ -40,6 +44,31 @@ services:
       timeout: 4s
       retries: 5
       start_period: 20s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  worker:
+    build:
+      context: ./apps/api
+    restart: unless-stopped
+    environment:
+      SUNLENA_ENVIRONMENT: production
+      SUNLENA_LOG_LEVEL: INFO
+      SUNLENA_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-sunlena}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB:-sunlena}
+      SUNLENA_MEDIA_ROOT: /var/lib/sunlena/media
+      SUNLENA_MEDIA_MAX_FILE_BYTES: 157286400
+      SUNLENA_MEDIA_MAX_USER_BYTES: 524288000
+    volumes:
+      - media_data:/var/lib/sunlena/media
+    depends_on:
+      database:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    command: ["python", "-m", "app.modules.media.worker"]
     read_only: true
     tmpfs:
       - /tmp
@@ -84,5 +113,6 @@ services:
 
 volumes:
   postgres_data:
+  media_data:
   caddy_data:
   caddy_config:

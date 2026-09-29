@@ -11,8 +11,12 @@ services:
       SUNLENA_FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
       SUNLENA_FIREBASE_SERVICE_ACCOUNT_PATH: /run/secrets/firebase-admin.json
       SUNLENA_APPLE_SEARCH_COUNTRY: ${APPLE_SEARCH_COUNTRY:-IN}
+      SUNLENA_MEDIA_ROOT: /var/lib/sunlena/media
+      SUNLENA_MEDIA_MAX_USER_BYTES: 524288000
+      SUNLENA_MEDIA_SIGNING_SECRET: ${SUNLENA_MEDIA_SIGNING_SECRET:-local-only-change-me}
     volumes:
       - ./.secrets:/run/secrets:ro
+      - media_data:/var/lib/sunlena/media
       - ./apps/api/app:/app/app:ro
       - ./apps/api/migrations:/app/migrations:ro
       - ./apps/api/alembic.ini:/app/alembic.ini:ro
@@ -28,6 +32,31 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  worker:
+    build:
+      context: ./apps/api
+    environment:
+      SUNLENA_ENVIRONMENT: development
+      SUNLENA_LOG_LEVEL: INFO
+      SUNLENA_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-sunlena}:${POSTGRES_PASSWORD:-local_only_change_me}@database:5432/${POSTGRES_DB:-sunlena}
+      SUNLENA_MEDIA_ROOT: /var/lib/sunlena/media
+      SUNLENA_MEDIA_MAX_FILE_BYTES: 157286400
+      SUNLENA_MEDIA_MAX_USER_BYTES: 524288000
+    volumes:
+      - media_data:/var/lib/sunlena/media
+    depends_on:
+      database:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    command: ["python", "-m", "app.modules.media.worker"]
+    restart: unless-stopped
     read_only: true
     tmpfs:
       - /tmp
@@ -70,3 +99,4 @@ services:
 
 volumes:
   postgres_data:
+  media_data:

@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     firebase_project_id: str | None = None
     firebase_service_account_path: str | None = "/run/secrets/firebase-admin.json"
     apple_search_country: str = "IN"
+    media_root: str = "/var/lib/sunlena/media"
+    media_max_file_bytes: int = 157286400
+    media_max_user_bytes: int = 524288000
+    media_signing_secret: str = "local-only-change-me"
 
     model_config = SettingsConfigDict(
         env_prefix="SUNLENA_",

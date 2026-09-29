@@ -76,6 +76,7 @@ async def search_apple(
                 "duration_ms": item.get("trackTimeMillis"),
                 "artwork_url": item.get("artworkUrl100", "").replace("100x100", "600x600"),
                 "source_url": item.get("trackViewUrl"),
+                "preview_url": item.get("previewUrl"),
                 "provider": "apple",
             }
         )
@@ -112,6 +113,7 @@ def track_payload(track: Track) -> dict[str, Any]:
         "duration_ms": track.duration_ms,
         "artwork_url": track.artwork_url,
         "source_url": track.source_url,
+        "preview_url": track.preview_url,
         "source": track.provider,
     }
 

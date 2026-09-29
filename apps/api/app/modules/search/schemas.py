@@ -9,6 +9,7 @@ class TrackSummary(BaseModel):
     duration_ms: int | None = None
     artwork_url: str | None = None
     source_url: str | None = None
+    preview_url: str | None = None
     source: str
 
 

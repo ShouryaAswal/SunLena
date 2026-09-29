@@ -4,7 +4,7 @@ SunLena is a new, learning-first rebuild of SunLeo: a music discovery and playli
 
 ## Current status
 
-The initial application flows are implemented: Apple catalog search, Firebase Google sign-in, PostgreSQL-backed playlists, reviews, and editorial mood discovery. Media extraction, reports/moderation, and account deletion are not implemented. This is an early foundation, not yet a verified feature-parity replacement for SunLeo; inspect the old source before calling parity complete.
+The current flows include Apple catalog search/previews, Firebase Google sign-in, PostgreSQL playlists/reviews, editorial discovery, persistent yt-dlp/FFmpeg download jobs, playback, and a bounded audio editor. Report/moderation and account deletion are not implemented. This remains a first feature-complete slice, not a verified feature-parity replacement for SunLeo.
 
 ## Start locally
 
@@ -15,7 +15,7 @@ Requirements: Docker Desktop with Compose v2.
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 New-Item -ItemType Directory -Force .secrets
-docker compose up --build
+docker compose up --build -d
 ```
 
 Open <http://localhost:5173>. API liveness is at <http://localhost:8000/health/live> and readiness at <http://localhost:8000/health/ready>.
@@ -27,9 +27,9 @@ Open <http://localhost:5173>. API liveness is at <http://localhost:8000/health/l
 3. Create a Firebase Admin service-account key and save it as `.secrets/firebase-admin.json`. This key is privileged: do not commit or share it. In a deployed environment, use a managed secret store instead of copying it to the image.
 4. Restart Compose after changing `.env` so Vite receives the browser config.
 
-Search uses Apple's public iTunes Search endpoint and stores normalized track references in PostgreSQL so playlists can refer to tracks. Results link back to Apple Music; artwork is displayed alongside the corresponding catalog link. The API caches search requests briefly and limits upstream calls. Provider rules and rate limits can change, so review them before opening the service publicly.
+Search uses Apple's public iTunes Search endpoint and stores normalized track references and optional preview URLs in PostgreSQL. Quick download queues a title/artist search using yt-dlp, then FFmpeg extracts the selected format. A separate single-concurrency worker updates persistent PostgreSQL job status and stores owner-private files on a shared named volume. The API limits jobs to 30 minutes/150 MB each, two active jobs per user, and 500 MB of completed files per user. The Studio editor trims and applies fades/EQ/volume/speed, then exports a new file without replacing the original.
 
-Without Firebase settings, catalog search works, while playlist/review writes correctly require sign-in. In Compose, PostgreSQL is wired and the API applies schema migrations before it starts. Last.fm enrichment and media extraction are not currently enabled.
+Without Firebase settings, catalog search and Apple preview playback work, while playlists, reviews and downloads require sign-in. In Compose, PostgreSQL is wired and the API applies schema migrations before it starts; the worker waits for API health before claiming jobs. Last.fm enrichment and the chatbot are not currently wired in.
 
 Stop with `Ctrl+C`, then run `docker compose down`. Use `docker compose down -v` only when you intentionally want to delete the local PostgreSQL volume and its data.
 
@@ -52,7 +52,7 @@ docker compose -f compose.lightsail.yaml ps
 docker compose -f compose.lightsail.yaml logs -f api caddy
 ```
 
-Caddy obtains and renews HTTPS certificates after DNS resolves. Verify `https://sunlena.your-domain`. The API and database do not publish host ports. This is still one VM: back up PostgreSQL, monitor disk and AWS spend, and keep media extraction disabled. AWS runtime and domain renewal can be billable; billing alerts do not cap spend. See [the Lightsail runbook](design%20docs/08-lightsail-domain-runbook.md) for the detailed DNS and TLS steps.
+Caddy obtains and renews HTTPS certificates after DNS resolves. Verify `https://sunlena.your-domain`. The API, database, and worker do not publish host ports. This is still one VM: monitor disk and AWS spend, and plan separate PostgreSQL/media backups. AWS runtime and domain renewal can be billable; billing alerts do not cap spend. See [the Lightsail runbook](design%20docs/08-lightsail-domain-runbook.md) for the detailed DNS and TLS steps.
 
 ## Documentation
 
@@ -63,4 +63,4 @@ Start with [design docs/README.md](design%20docs/README.md) for product scope, a
 - Start as a modular monolith plus a separate worker process, not a fleet of microservices.
 - Do not commit secrets or user media.
 - Public AWS hosting is not guaranteed to cost zero; check current pricing before provisioning.
-- Media extraction/downloading is not implemented. Do not enable an arbitrary-URL downloader without a rights basis and a safe source policy.
+- The media worker only searches by a catalog track's title/artist; do not expose arbitrary URL download routes or the private media volume.

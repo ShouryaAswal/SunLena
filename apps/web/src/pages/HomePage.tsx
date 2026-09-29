@@ -1,16 +1,18 @@
 import {
-  ArrowDownRight, ArrowRight, ArrowUpRight, AudioLines, Check, Disc3, Headphones,
-  ListMusic, LogOut, MessageCircle, Music2, Plus, Search, Sparkles, Star, Trash2,
+  ArrowDownRight, ArrowRight, ArrowUpRight, AudioLines, Check, Disc3, Download, Headphones,
+  ListMusic, LogOut, MessageCircle, Music2, Play, Plus, Search, Sparkles, Star, Trash2,
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   addTrack, createPlaylist, deletePlaylist, deleteReview, getDiscover, getPlaylists,
   getMyReview, getReviews, removePlaylistItem, reorderPlaylist, saveReview, searchTracks,
-  updatePlaylist, type DiscoverySection, type Playlist, type ReviewList, type SearchResponse,
+  createMediaJob, createMediaPlaybackUrl, getMediaJobs, updatePlaylist, type DiscoverySection, type Playlist, type ReviewList, type SearchResponse,
   type SearchResult,
 } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { useAudioPlayer } from '../lib/audioPlayer'
+import MediaWorkspace from '../components/MediaWorkspace'
 
 const moods = [
   { id: 'soft-focus', name: 'Soft focus', note: 'A little room to think', color: 'moss' },
@@ -32,6 +34,8 @@ function Artwork({ track }: { track?: SearchResult }) {
 
 export default function HomePage() {
   const { user, ready: authReady, configured, signIn, signOutUser, getToken } = useAuth()
+  const player = useAudioPlayer()
+  const [activeTab, setActiveTab] = useState<'discover' | 'downloads' | 'editor'>('discover')
   const [query, setQuery] = useState('')
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [searchField, setSearchField] = useState('all')
@@ -57,6 +61,13 @@ export default function HomePage() {
   const [sharePlaylist, setSharePlaylist] = useState<Playlist | null>(null)
   const [sharedPlaylist, setSharedPlaylist] = useState<Playlist | null>(null)
   const [savingTrackId, setSavingTrackId] = useState('')
+  const [saveTrackTarget, setSaveTrackTarget] = useState<SearchResult | null>(null)
+  const [savePlaylistId, setSavePlaylistId] = useState('')
+  const [pendingSaveTrack, setPendingSaveTrack] = useState<SearchResult | null>(null)
+  const [downloadingTrackId, setDownloadingTrackId] = useState('')
+  const [downloadFormat, setDownloadFormat] = useState('mp3')
+  const [downloadBitrate, setDownloadBitrate] = useState('192')
+  const [editorJobId, setEditorJobId] = useState('')
   const controller = useRef<AbortController | null>(null)
   const createDialog = useRef<HTMLDialogElement>(null)
   const managerDialog = useRef<HTMLDialogElement>(null)
@@ -64,6 +75,7 @@ export default function HomePage() {
   const reviewDialog = useRef<HTMLDialogElement>(null)
   const shareDialog = useRef<HTMLDialogElement>(null)
   const sharedDialog = useRef<HTMLDialogElement>(null)
+  const saveDialog = useRef<HTMLDialogElement>(null)
 
   const selectedPlaylist = useMemo(
     () => playlists.find((playlist) => playlist.id === selectedPlaylistId) ?? null,
@@ -75,6 +87,7 @@ export default function HomePage() {
     const pairs = [
       [createOpen, createDialog], [managerOpen, managerDialog], [accountOpen, accountDialog], [Boolean(activeTrack), reviewDialog],
       [Boolean(sharePlaylist), shareDialog], [Boolean(sharedPlaylist), sharedDialog],
+      [Boolean(saveTrackTarget), saveDialog],
     ] as const
     for (const [open, ref] of pairs) {
       const dialog = ref.current
@@ -82,7 +95,7 @@ export default function HomePage() {
       if (open && !dialog.open) dialog.showModal()
       if (!open && dialog.open) dialog.close()
     }
-  }, [createOpen, managerOpen, accountOpen, activeTrack, sharePlaylist, sharedPlaylist])
+  }, [createOpen, managerOpen, accountOpen, activeTrack, sharePlaylist, sharedPlaylist, saveTrackTarget])
 
   useEffect(() => {
     let live = true
@@ -151,13 +164,14 @@ export default function HomePage() {
     }
   }
 
-  function openCreatePlaylist() {
+  function openCreatePlaylist(trackToSave?: SearchResult) {
     if (!user) {
       setNotice('Sign in with Google to create and save playlists.')
       return
     }
     setNewTitle('')
     setNewDescription('')
+    setPendingSaveTrack(trackToSave ?? null)
     setCreateOpen(true)
   }
 
@@ -168,10 +182,13 @@ export default function HomePage() {
     setCreating(true)
     try {
       const created = await createPlaylist(token, newTitle.trim(), newDescription.trim())
-      setPlaylists((rows) => [created, ...rows])
-      setSelectedPlaylistId(created.id)
+      let ready = created
+      if (pendingSaveTrack) ready = await addTrack(token, created.id, pendingSaveTrack.id)
+      setPlaylists((rows) => [ready, ...rows])
+      setSelectedPlaylistId(ready.id)
+      setPendingSaveTrack(null)
       setCreateOpen(false)
-      setNotice(`“${created.title}” is ready.`)
+      setNotice(pendingSaveTrack ? `“${pendingSaveTrack.title}” saved to “${ready.title}”.` : `“${ready.title}” is ready.`)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not create that playlist.')
     } finally {
@@ -179,26 +196,74 @@ export default function HomePage() {
     }
   }
 
-  async function saveTrack(track: SearchResult) {
+  function saveTrack(track: SearchResult) {
     if (!user) return setNotice('Sign in with Google to save music.')
     if (!selectedPlaylistId) {
+      setPendingSaveTrack(track)
       setNewTitle('Saved songs')
       setNewDescription('A place for the music you want to keep close.')
       setCreateOpen(true)
-      setNotice('Create your first playlist, then save this track.')
+      setNotice('Create your first playlist and this song will be added to it.')
       return
     }
+    setSavePlaylistId(playlists.some((playlist) => playlist.id === selectedPlaylistId) ? selectedPlaylistId : playlists[0].id)
+    setSaveTrackTarget(track)
+  }
+
+  async function confirmSaveTrack(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const track = saveTrackTarget
+    if (!track || !savePlaylistId) return
     const token = await getToken()
     if (!token) return setNotice('Your sign-in expired. Please sign in again.')
     setSavingTrackId(track.id)
     try {
-      const updated = await addTrack(token, selectedPlaylistId, track.id)
+      const updated = await addTrack(token, savePlaylistId, track.id)
       setPlaylists((rows) => rows.map((playlist) => playlist.id === updated.id ? updated : playlist))
       setNotice(`Saved to “${updated.title}”.`)
+      setSaveTrackTarget(null)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not save this track.')
     } finally {
       setSavingTrackId('')
+    }
+  }
+
+  async function startDownload(track: SearchResult) {
+    if (!user) return setNotice('Sign in with Google in the top-right corner, then choose Quick download again.')
+    const token = await getToken()
+    if (!token) return setNotice('Your sign-in expired. Please sign in again.')
+    setDownloadingTrackId(track.id)
+    try {
+      await createMediaJob(token, track.id, downloadFormat, downloadBitrate)
+      setActiveTab('downloads')
+      setNotice(`Finding a YouTube match for “${track.title}”.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not start this download.')
+    } finally { setDownloadingTrackId('') }
+  }
+
+  async function playPlaylist(playlist: Playlist, shuffle = false) {
+    const tracks = playlist.items.map((item) => item.track)
+    if (!tracks.length) return setNotice('This playlist is empty.')
+    try {
+      const token = await getToken()
+      const downloads = token ? await getMediaJobs(token) : []
+      const entries = tracks.map((track) => {
+        const local = downloads.find((job) => job.track_id === track.id && job.status === 'completed')
+        return {
+          track,
+          source: track.preview_url ?? null,
+          resolveSource: async () => local && token
+            ? await createMediaPlaybackUrl(token, local.id, true)
+            : track.preview_url ?? null,
+        }
+      }).filter((entry) => entry.source || downloads.some((job) => job.track_id === entry.track.id && job.status === 'completed'))
+      if (!entries.length) return setNotice('No previews or downloaded files are available for this playlist yet.')
+      player.playEntries(entries, shuffle)
+      setNotice(shuffle ? 'Shuffling your playlist.' : 'Playing your playlist.')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'This playlist could not be played.')
     }
   }
 
@@ -324,9 +389,11 @@ export default function HomePage() {
       <header className="topbar">
         <a className="wordmark" href="#top" aria-label="SunLena home"><span className="brand-mark"><AudioLines size={18} strokeWidth={1.8} /></span>sunlena</a>
         <nav aria-label="Main navigation" className="main-nav">
-          <a className="nav-active" href="#discover">Discover</a>
+          <a className={activeTab === 'discover' ? 'nav-active' : ''} href="#discover" onClick={(event) => { event.preventDefault(); setActiveTab('discover') }}>Discover</a>
+          <a className={activeTab === 'downloads' ? 'nav-active' : ''} href="#downloads" onClick={(event) => { event.preventDefault(); setActiveTab('downloads') }}>Downloads</a>
+          <a className={activeTab === 'editor' ? 'nav-active' : ''} href="#studio" onClick={(event) => { event.preventDefault(); setActiveTab('editor') }}>Studio</a>
           <a href="#playlists" onClick={(event) => { event.preventDefault(); user ? setManagerOpen(true) : setNotice('Sign in with Google to open your playlists.') }}>Playlists</a>
-          <a href="#about">About</a>
+          <a href="#about" onClick={() => setActiveTab('discover')}>About</a>
         </nav>
         {user ? <button className="account-button" type="button" onClick={() => setAccountOpen(true)} title="Account settings"><span className="avatar-dot">{(user.displayName || user.email || 'S').slice(0, 1).toUpperCase()}</span><span>{user.displayName?.split(' ')[0] || 'Account'}</span></button> : <button className="account-button" type="button" onClick={() => void handleSignIn()} title={configured ? 'Sign in with Google' : 'Add Firebase settings to .env to enable Google sign-in'}><span className="avatar-dot">S</span><span>{authReady ? 'Sign in' : 'Loading…'}</span></button>}
       </header>
@@ -350,7 +417,7 @@ export default function HomePage() {
         <div className="hero-art" aria-hidden="true">
           <div className="orb orb-one" /><div className="orb orb-two" /><div className="orb orb-three" />
           <div className="art-halo" />
-          <div className="art-disc"><div className="disc-groove groove-one" /><div className="disc-groove groove-two" /><div className="disc-groove groove-three" /><div className="disc-label"><AudioLines size={22} /></div></div>
+          <div className={`art-disc ${player.isPlaying ? 'disc-playing' : ''}`}><div className="disc-groove groove-one" /><div className="disc-groove groove-two" /><div className="disc-groove groove-three" /><div className="disc-label"><AudioLines size={22} /></div></div>
           <div className="art-note note-top">SIDE A <span>01 — 08</span></div>
           <div className="art-note note-bottom"><span className="playing-bars"><i /><i /><i /><i /></span> made for this moment</div>
           <div className="art-spark spark-a">✳</div><div className="art-spark spark-b">✳</div>
@@ -358,19 +425,21 @@ export default function HomePage() {
         <a className="scroll-cue" href="#discover"><span>Take a look around</span><ArrowDownRight size={16} /></a>
       </section>
 
+      {activeTab === 'discover' && <>
       {(loading || searchError || response) && <section className="search-results" id="search-results" aria-live="polite">
         {loading && <div className="search-state"><span className="spinner" /> Searching the music catalog…</div>}
         {searchError && <div className="search-state search-error" role="alert">{searchError}</div>}
         {response && <>
-          <div className="section-heading result-heading"><div><p className="eyebrow">Apple Music catalog</p><h2>Results for “{response.query}”</h2></div><span className="result-count">{response.results.length} tracks</span></div>
+          <div className="section-heading result-heading"><div><p className="eyebrow">Apple Music catalog</p><h2>Results for “{response.query}”</h2></div><div className="result-tools"><span className="result-count">{response.results.length} tracks</span><label>Quick download format<select value={downloadFormat} onChange={(event) => { const format = event.target.value; setDownloadFormat(format); if (format === 'mp3' && downloadBitrate === '256') setDownloadBitrate('192'); if ((format === 'm4a' || format === 'opus') && downloadBitrate === '320') setDownloadBitrate('192') }}><option value="mp3">MP3</option><option value="m4a">M4A</option><option value="opus">Opus</option><option value="mp4">MP4 video</option></select></label>{downloadFormat !== 'mp4' && <label>Quality<select value={downloadBitrate} onChange={(event) => setDownloadBitrate(event.target.value)}><option value="128">128 kbps</option><option value="192">192 kbps</option><option value="256" disabled={downloadFormat === 'mp3'}>256 kbps</option><option value="320" disabled={downloadFormat !== 'mp3'}>320 kbps</option></select></label>}</div></div>
           {response.results.length ? <div className="track-list">{response.results.map((track) => <article className="track-row" key={track.id}>
             <Artwork track={track} /><div className="track-main"><h3>{track.title}</h3><p>{track.artist}{track.album ? ` · ${track.album}` : ''}</p><span className="track-source">APPLE MUSIC CATALOG</span></div>
             <span className="track-duration">{formatDuration(track.duration_ms)}</span>
+            <button type="button" className="icon-action preview-action" onClick={() => track.preview_url ? player.playTrack(track) : setNotice('A preview is not available for this track.')} disabled={!track.preview_url} title={track.preview_url ? 'Preview song' : 'Preview not available'}><Play size={15} fill="currentColor" /><span>Preview</span></button>
             <button type="button" className="icon-action review-action" onClick={() => void loadReviews(track)} title="Read or write a review"><MessageCircle size={17} /><span>Reviews</span></button>
-            <button type="button" className="save-track" onClick={() => void saveTrack(track)} disabled={savingTrackId === track.id} title={user ? 'Save to selected playlist' : 'Sign in to save'}><Plus size={17} /><span>{savingTrackId === track.id ? 'Saving' : 'Save'}</span></button>
+            <button type="button" className="save-track" onClick={() => saveTrack(track)} disabled={savingTrackId === track.id} title={user ? 'Choose a playlist' : 'Sign in to save'}><Plus size={17} /><span>Save</span></button>
+            <button type="button" className="icon-action quick-download" onClick={() => void startDownload(track)} disabled={downloadingTrackId === track.id} title={user ? 'Find and download this track' : 'Sign in to download'}><Download size={15} /><span>{downloadingTrackId === track.id ? 'Adding…' : 'Quick download'}</span></button>
             {track.source_url && <a className="icon-action source-action" href={track.source_url} target="_blank" rel="noreferrer" aria-label="Open track in Apple Music">Apple Music <ArrowUpRight size={14} /></a>}
           </article>)}</div> : <div className="empty-results">No matching tracks came back. Try a shorter song title or search by artist.</div>}
-          {playlists.length > 0 && <div className="save-target"><label htmlFor="save-target-select">Save tracks to</label><select id="save-target-select" value={selectedPlaylistId} onChange={(event) => setSelectedPlaylistId(event.target.value)}>{playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.title}</option>)}</select><button type="button" className="text-link" onClick={() => setManagerOpen(true)}>Manage playlists <ArrowRight size={15} /></button></div>}
         </>}
       </section>}
 
@@ -392,9 +461,12 @@ export default function HomePage() {
       <section className="collection-band" id="playlists">
         <div className="collection-icon"><Headphones size={22} strokeWidth={1.5} /></div>
         <div><p className="eyebrow">Your corner of the library</p><h2>Good music deserves<br />a place to <em>stay.</em></h2><p className="collection-copy">Save the songs you love, shape them into playlists, and keep the feeling close.</p></div>
-        <div className="collection-cta"><span>{user ? `${playlists.length} PLAYLIST${playlists.length === 1 ? '' : 'S'} IN YOUR LIBRARY` : 'YOUR PLAYLISTS, YOUR WAY'}</span><button type="button" onClick={() => user ? setManagerOpen(true) : void handleSignIn()}><>{user ? 'Open your library' : 'Sign in to begin'} <ArrowRight size={16} /></></button><button className="create-playlist-link" type="button" onClick={openCreatePlaylist}><Plus size={15} /> Create playlist</button></div>
+        <div className="collection-cta"><span>{user ? `${playlists.length} PLAYLIST${playlists.length === 1 ? '' : 'S'} IN YOUR LIBRARY` : 'YOUR PLAYLISTS, YOUR WAY'}</span><button type="button" onClick={() => user ? setManagerOpen(true) : void handleSignIn()}><>{user ? 'Open your library' : 'Sign in to begin'} <ArrowRight size={16} /></></button><button className="create-playlist-link" type="button" onClick={() => openCreatePlaylist()}><Plus size={15} /> Create playlist</button></div>
         <div className="collection-orbit orbit-a" /><div className="collection-orbit orbit-b" />
       </section>
+      </>}
+
+      {activeTab !== 'discover' && <MediaWorkspace tab={activeTab} user={Boolean(user)} getToken={getToken} onNotice={setNotice} onPlay={player.playTrack} onEditJob={(jobId) => { setEditorJobId(jobId); setActiveTab('editor') }} editorJobId={editorJobId} />}
 
       <footer className="footer" id="about"><a className="wordmark footer-brand" href="#top"><span className="brand-mark"><AudioLines size={17} /></span>sunlena</a><p>Made with care, for the songs we keep.</p><span className="footer-meta">CATALOG BY APPLE <span>© 2026</span></span></footer>
 
@@ -404,14 +476,21 @@ export default function HomePage() {
 
       <dialog className="app-dialog create-dialog" ref={createDialog} onClose={() => setCreateOpen(false)} aria-labelledby="create-title">
         <div className="dialog-head"><div><p className="eyebrow">A new collection</p><h2 id="create-title">Make it yours.</h2></div><button className="dialog-close" type="button" onClick={() => setCreateOpen(false)} aria-label="Close"><X size={20} /></button></div>
-        <form onSubmit={(event) => void submitCreatePlaylist(event)} className="dialog-form"><label>Playlist name<input autoFocus value={newTitle} maxLength={100} required onChange={(event) => setNewTitle(event.target.value)} placeholder="Sunday morning" /></label><label>A note, if you like<textarea value={newDescription} maxLength={500} onChange={(event) => setNewDescription(event.target.value)} placeholder="What does this collection feel like?" rows={3} /></label><div className="dialog-actions"><button type="button" className="quiet-button" onClick={() => setCreateOpen(false)}>Cancel</button><button type="submit" className="primary-button" disabled={creating}>{creating ? 'Creating…' : 'Create playlist'} <ArrowRight size={16} /></button></div></form>
+        <form onSubmit={(event) => void submitCreatePlaylist(event)} className="dialog-form"><label>Playlist name<input autoFocus value={newTitle} maxLength={100} required onChange={(event) => setNewTitle(event.target.value)} placeholder="Sunday morning" /></label><label>A note, if you like<textarea value={newDescription} maxLength={500} onChange={(event) => setNewDescription(event.target.value)} placeholder="What does this collection feel like?" rows={3} /></label><div className="dialog-actions"><button type="button" className="quiet-button" onClick={() => { setCreateOpen(false); setPendingSaveTrack(null) }}>Cancel</button><button type="submit" className="primary-button" disabled={creating}>{creating ? 'Creating…' : pendingSaveTrack ? 'Create & save song' : 'Create playlist'} <ArrowRight size={16} /></button></div></form>
+      </dialog>
+
+      <dialog className="app-dialog save-track-dialog" ref={saveDialog} onClose={() => setSaveTrackTarget(null)} aria-labelledby="save-track-title">
+        {saveTrackTarget && <><div className="dialog-head"><div><p className="eyebrow">A song to keep close</p><h2 id="save-track-title">Choose a playlist.</h2><p className="shared-description">{saveTrackTarget.title} · {saveTrackTarget.artist}</p></div><button className="dialog-close" type="button" onClick={() => setSaveTrackTarget(null)} aria-label="Close"><X size={20} /></button></div>
+          <form className="save-playlist-form" onSubmit={(event) => void confirmSaveTrack(event)}><div className="save-playlist-options">{playlists.map((playlist) => <label className={`save-playlist-option ${savePlaylistId === playlist.id ? 'selected' : ''}`} key={playlist.id}><input type="radio" name="save-playlist" value={playlist.id} checked={savePlaylistId === playlist.id} onChange={() => setSavePlaylistId(playlist.id)} /><ListMusic size={18} /><span><strong>{playlist.title}</strong><small>{playlist.items.length} tracks · {playlist.visibility}</small></span></label>)}</div><div className="dialog-actions"><button type="button" className="quiet-button" onClick={() => { setSaveTrackTarget(null); openCreatePlaylist(saveTrackTarget) }}><Plus size={14} /> New playlist</button><button type="submit" className="primary-button" disabled={savingTrackId === saveTrackTarget.id || !savePlaylistId}>{savingTrackId === saveTrackTarget.id ? 'Saving…' : 'Save song'} <ArrowRight size={15} /></button></div></form>
+        </>}
       </dialog>
 
       <dialog className="app-dialog manager-dialog" ref={managerDialog} onClose={() => setManagerOpen(false)} aria-labelledby="library-title">
-        <div className="dialog-head"><div><p className="eyebrow">Your corner of the library</p><h2 id="library-title">Your playlists</h2></div><div className="dialog-head-actions"><button className="primary-button compact-button" type="button" onClick={openCreatePlaylist}><Plus size={15} /> New playlist</button><button className="dialog-close" type="button" onClick={() => setManagerOpen(false)} aria-label="Close"><X size={20} /></button></div></div>
-        {!user ? <p className="dialog-empty">Sign in with Google to see your private library.</p> : playlists.length === 0 ? <div className="dialog-empty"><ListMusic size={28} /><p>Your library is ready for its first playlist.</p><button className="primary-button" onClick={openCreatePlaylist} type="button">Create a playlist <ArrowRight size={16} /></button></div> : <div className="library-layout">
+        <div className="dialog-head"><div><p className="eyebrow">Your corner of the library</p><h2 id="library-title">Your playlists</h2></div><div className="dialog-head-actions"><button className="primary-button compact-button" type="button" onClick={() => openCreatePlaylist()}><Plus size={15} /> New playlist</button><button className="dialog-close" type="button" onClick={() => setManagerOpen(false)} aria-label="Close"><X size={20} /></button></div></div>
+        {!user ? <p className="dialog-empty">Sign in with Google to see your private library.</p> : playlists.length === 0 ? <div className="dialog-empty"><ListMusic size={28} /><p>Your library is ready for its first playlist.</p><button className="primary-button" onClick={() => openCreatePlaylist()} type="button">Create a playlist <ArrowRight size={16} /></button></div> : <div className="library-layout">
           <div className="library-sidebar" aria-label="Playlist list">{playlists.map((playlist) => <button className={`playlist-choice ${selectedPlaylistId === playlist.id ? 'selected' : ''}`} key={playlist.id} onClick={() => setSelectedPlaylistId(playlist.id)}><ListMusic size={17} /><span><strong>{playlist.title}</strong><small>{playlist.items.length} tracks · {playlist.visibility}</small></span></button>)}</div>
           {selectedPlaylist && <section className="playlist-detail">
+            <div className="playlist-listen-tools"><button className="quiet-button" type="button" onClick={() => void playPlaylist(selectedPlaylist)}><Play size={14} fill="currentColor" /> Play playlist</button><button className="quiet-button" type="button" onClick={() => void playPlaylist(selectedPlaylist, true)}><Sparkles size={14} /> Shuffle</button></div>
             <form className="playlist-edit" onSubmit={async (event) => { event.preventDefault(); const token = await getToken(); if (!token) return; try { const updated = await updatePlaylist(token, selectedPlaylist.id, { title: selectedPlaylist.title, description: selectedPlaylist.description ?? '' }); setPlaylists((rows) => rows.map((row) => row.id === updated.id ? updated : row)); setNotice('Playlist details saved.') } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not update playlist.') } }}>
               <input aria-label="Playlist name" value={selectedPlaylist.title} maxLength={100} onChange={(event) => setPlaylists((rows) => rows.map((row) => row.id === selectedPlaylist.id ? { ...row, title: event.target.value } : row))} />
               <textarea aria-label="Playlist description" value={selectedPlaylist.description ?? ''} maxLength={500} onChange={(event) => setPlaylists((rows) => rows.map((row) => row.id === selectedPlaylist.id ? { ...row, description: event.target.value } : row))} placeholder="Add a note" rows={2} />

@@ -19,6 +19,7 @@ class Track(Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     artwork_url: Mapped[str | None] = mapped_column(String(2048))
     source_url: Mapped[str | None] = mapped_column(String(2048))
+    preview_url: Mapped[str | None] = mapped_column(String(2048))
     provider: Mapped[str] = mapped_column(String(40), default="apple")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

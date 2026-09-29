@@ -12,14 +12,17 @@ Aim for premium music-editorial restraint: space, excellent typography, small pa
 - Semantic tokens make dark mode possible later without rewriting components.
 
 ## Home
-Compact brand/navigation/account header; prominent title/artist search; recent activity only when meaningful; saved playlist area/create action; source-labelled discovery rows; advanced filters/mood as secondary actions. Reserve image dimensions, show useful skeletons, and make first interaction fast.
+Compact brand/navigation/account header; prominent title/artist search; recent activity only when meaningful; saved playlist area/create action; source-labelled discovery rows; advanced filters/mood as secondary actions. Search rows provide sample preview, reviews, a playlist picker and explicit Quick download. Reserve image dimensions, show useful skeletons, and make first interaction fast.
 
 ## Screens/states
 - Search: persistent query, filters in drawer/dialog, source labels, careful dedupe, correction guidance, partial-outage state.
-- Track: title/artist/album, source/artwork, review summary and playlist action; metadata never implies audio availability.
+- Track: title/artist/album, source/artwork, short preview when the catalog supplies it, review summary, playlist picker and Quick download.
 - Playlist: editable title/description/visibility, accessible reorder, item count, sharing only when enabled, destructive confirmation.
 - Discover/mood: explain selection (“tagged mellow”), allow dismissal/correction.
-- Job: queued/processing/succeeded/failed/expired, honest progress, retry/cancel/expiry.
+- Downloads: recent files, queued/running/completed/failed status, stage label, determinate progress when yt-dlp reports byte estimates, found source title, play, device download, open-in-Studio and delete.
+- Player: persistent playback bar with artwork/title, play/pause, previous/next, seek and shuffle. The home record spins while audio is playing. Playlist queues prefer a listener's downloaded file, then use the catalog's short preview where available.
+- Audio Studio: choose a completed private download; edit trim points, fades, bass, treble, volume and speed; select MP3/AAC/OGG/MP4/WAV/FLAC and bitrate/lossless output; preview and save a new copy. Preserve the original.
+- Save: each Save action opens a radio-list picker for the destination playlist. Creating the first playlist should preserve and add the pending track.
 - Account: identity provider, privacy/share settings, data actions and sign-out.
 - Review: one per user/track initially; edit/delete/report and length limit.
 

@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.modules.catalog import models as catalog_models
 from app.modules.identity import models as identity_models
+from app.modules.media import models as media_models
 from app.modules.playlists import models as playlist_models
 from app.modules.reviews import models as review_models
 

@@ -28,10 +28,10 @@ Resolve-DnsName sunlena.shouryaaswal.dev
 Address should match static IP. If not, check active nameservers, host field, conflicting A/AAAA records and wait for TTL.
 
 6. Configure Caddy hostname, proxy `/api/*` to FastAPI and serve React with SPA fallback. Only proxy binds public ports. Once DNS resolves and ports are open, start Caddy and inspect certificate logs. Confirm HTTP→HTTPS and matching certificate.
-7. Add production hostname to Google/Firebase allowed domains/OAuth origins and exact backend CORS.
-8. Verify search, auth, cross-account privacy, DB persistence after container restart, instance reboot, backup restore, closed ports, logs/disk/alerts.
+7. Add production hostname to Firebase Authorized domains and enable Google sign-in.
+8. Verify search and Apple preview, Google auth, playlists, per-track save choice, downloads/progress, source-title match, playback, editing/export, cross-account media privacy, DB/media persistence after restart/reboot, backup restore, closed ports, logs/disk/alerts.
 
-The repo's production Compose command is `docker compose -f compose.lightsail.yaml up -d --build`. Prepare `.env` from `env.lightsail.example` and `.secrets/firebase-admin.json` first. Caddy publishes only 80/443, routes API calls privately to FastAPI, serves the static production frontend, and stores certificate state in persistent volumes. Use `docker compose -f compose.lightsail.yaml logs -f api caddy` to inspect startup and certificate issues.
+The repo's production Compose command is `docker compose -f compose.lightsail.yaml up -d --build`. Prepare `.env` from `env.lightsail.example` and `.secrets/firebase-admin.json` first. Caddy publishes only 80/443, routes API calls privately to FastAPI, serves the static production frontend, and stores certificate state in persistent volumes. A single non-root worker shares PostgreSQL and the private `media_data` volume with the API. Downloads and Caddy state are separate from the PostgreSQL volume; back up the database and decide whether to back up personal audio too. Keep one worker on a small VM, check free disk, and never mount media into the web container. Use `docker compose -f compose.lightsail.yaml logs -f api worker caddy` to inspect startup and certificate issues.
 
 Caddy/Let's Encrypt is a low-cost single-host TLS option. Lightsail certificates are for Lightsail load balancers, not individual instances. A load balancer offers managed TLS/redirect and later balancing, but adds monthly cost and does not make one backend instance HA.
 

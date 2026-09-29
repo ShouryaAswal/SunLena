@@ -4,9 +4,9 @@ This is the beginner-friendly runbook for the code that exists in this repositor
 
 ## What is implemented today
 
-The current app is a single-host Compose stack: a React/Vite web app, one modular FastAPI API, and PostgreSQL. Caddy is added only in the Lightsail stack and handles public HTTP/HTTPS. Google sign-in uses Firebase in the browser; the API verifies Firebase ID tokens using a Firebase Admin service-account JSON file. The backend stores playlists, track references, and reviews in Postgres.
+The current app is a Compose stack: a React/Vite web app, one modular FastAPI API, PostgreSQL, and a separate one-at-a-time media worker. Caddy is added only in the Lightsail stack and handles public HTTP/HTTPS. Google sign-in uses Firebase in the browser; the API verifies Firebase ID tokens using a Firebase Admin service-account JSON file. PostgreSQL stores playlists, reviews, and durable download-job state; a private named volume stores media files.
 
-This is not yet full SunLeo feature parity. In particular, YouTube/yt-dlp media downloads, Last.fm enrichment, chatbot/recommendation services, and the old provider integrations are not wired into SunLena. The legacy environment keys have been retained locally for reference, but copying a key does not implement its old feature. Media extraction should remain disabled until source permissions, provider terms, abuse limits, and the resource/cost model are decided.
+This is not yet full SunLeo feature parity. The core yt-dlp/FFmpeg media workflow and pydub/FFmpeg editor are present; Last.fm enrichment, chatbot/recommendation services, and several old provider integrations are not yet wired into SunLena. The legacy environment keys have been retained locally for reference, but copying a key does not implement its old feature. Quick download searches by the selected song's title and artist and uses the first YouTube result; inspect the source title shown in Downloads because a title match is not a guarantee of the exact recording.
 
 ## Credential migration already done
 
@@ -33,6 +33,15 @@ docker info
 
 ### 2. Confirm local-only settings and start the stack
 
+The API and worker images install Python dependencies during the Docker image build from `apps/api/pyproject.toml`. `yt-dlp` has a minimum version and no upper bound, so a fresh dependency install resolves the newest published version satisfying that requirement. Starting an already-built container does not run pip again, and Docker may reuse its cached dependency layer. This is intentional: changing dependencies on every container start makes deployments unpredictable. When you specifically want to refresh yt-dlp and the Python packages, rebuild those images without cache, then start the stack:
+
+```powershell
+docker compose build --no-cache api worker
+docker compose up -d
+```
+
+The first build takes longer because it refreshes the base OS package index, installs FFmpeg, and resolves Python dependencies again. Review dependency changes before deploying them to Lightsail.
+
 The `.env` and Firebase JSON have already been copied into this checkout. Check their presence without printing their contents:
 
 ```powershell
@@ -45,11 +54,11 @@ Then build and start the development stack:
 
 ```powershell
 docker compose config --quiet
-docker compose up --build -d
+docker compose up -d --build
 docker compose ps
 ```
 
-Compose builds the web/API images and starts PostgreSQL. The API container runs database migrations before it starts serving. PostgreSQL data is stored in the named `postgres_data` volume, so normal container replacement preserves it.
+Compose builds the web/API/worker images and starts PostgreSQL. The API container runs database migrations before it starts serving; the worker waits for the API health check. PostgreSQL data and media files use separate named volumes, so normal container replacement preserves both.
 
 Open <http://localhost:5173>. Check the API at <http://localhost:8000/health/live>, readiness at <http://localhost:8000/health/ready>, and interactive API docs at <http://localhost:8000/docs>.
 
@@ -117,6 +126,7 @@ Have these ready:
 - A Firebase project with Google provider enabled and the matching Admin JSON.
 - The chosen full hostname, for example `sunlena.shouryaaswal.dev` (only if that domain is in your Name.com account).
 - A strong, unique PostgreSQL password. Generate one on a trusted machine with `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`; store it in a password manager.
+- A playback-link signing key: `openssl rand -hex 32`. Keep it in the server's ignored `.env`; API instances must share this secret.
 - A backup plan for the database. A Docker volume survives container rebuilds, but not loss of the VM/disk.
 
 ### 2. Create the Lightsail instance
@@ -124,7 +134,7 @@ Have these ready:
 In the AWS Lightsail console:
 
 1. Create a Linux/Unix Ubuntu LTS instance in a nearby AWS Region. Mumbai (`ap-south-1`) is a natural latency choice for users in India, though compare current costs and available plans.
-2. Choose enough memory and disk for the API plus PostgreSQL; the smallest plan may run out of memory during builds or database use. Keep media conversion off on this single host.
+2. Choose enough memory and disk for the API, PostgreSQL, web server, and the one-at-a-time media worker; the smallest plan may run out of memory during builds or media conversion. Build images elsewhere when practical, monitor free disk and memory, and keep worker concurrency at one on this single host.
 3. Create/attach a **static IPv4** in the instance's Networking page. A default dynamic address can change after stop/start; the static address is what the DNS record must use. [Lightsail static IP instructions](https://docs.aws.amazon.com/lightsail/latest/userguide/lightsail-create-static-ip.html)
 4. In the Lightsail firewall, allow TCP 80 and 443 from all IPv4 addresses. Allow SSH TCP 22 only from your own current IP when practical. Do not open 5173, 8000, 5432, or any database port publicly. [Lightsail firewall documentation](https://docs.aws.amazon.com/lightsail/latest/userguide/understanding-firewall-and-port-mappings-in-amazon-lightsail.html)
 5. Connect using the browser SSH client or your downloaded SSH key. The default Ubuntu user is usually `ubuntu`.
@@ -168,7 +178,7 @@ mkdir -p .secrets
 chmod 700 .secrets
 ```
 
-Edit the production file using `nano .env`. Set `SUNLENA_HOST`, all five Firebase settings (`FIREBASE_PROJECT_ID` plus the four `VITE_FIREBASE_*` keys), and a newly generated `POSTGRES_PASSWORD`. Use no surrounding `<` or `>` placeholders. Keep the Firebase project IDs identical. This production file is separate from the local `.env` and should have only the production variables shown in `env.lightsail.example`.
+Edit the production file using `nano .env`. Set `SUNLENA_HOST`, all five Firebase settings (`FIREBASE_PROJECT_ID` plus the four `VITE_FIREBASE_*` keys), a newly generated `POSTGRES_PASSWORD`, and `SUNLENA_MEDIA_SIGNING_SECRET`. Use no surrounding `<` or `>` placeholders. Keep the Firebase project IDs identical. This production file is separate from the local `.env` and should have only the production variables shown in `env.lightsail.example`.
 
 From a **second PowerShell window on your own computer**, copy the Admin JSON into the server's secret directory. Replace `<STATIC_IP>` with the Lightsail address and confirm the SSH key/user/path for your setup:
 
@@ -261,4 +271,3 @@ This rebuilds/replaces containers whose definitions or images changed. It keeps 
 The goal can be a very low-cost setup, but a public Lightsail deployment is not guaranteed to cost zero. The server plan, storage, traffic, snapshots/backups, domain renewal, and Firebase usage can have charges. Check the current AWS pricing page for the selected region and your account before provisioning. Start with one instance and no CloudFront/load balancer; add services only when measured need or a learning milestone justifies the extra cost and operations.
 
 This one-machine setup is a single point of failure. It is not a backup. Schedule database backups, test restoring one, update Ubuntu/Docker, watch disk space/log growth, restrict SSH, and keep private credentials out of Git and images. Avoid storing downloaded media on the VM until retention, licensing, abuse limits, and disk cleanup are designed.
-
