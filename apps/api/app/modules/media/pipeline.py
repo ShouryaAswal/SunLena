@@ -9,6 +9,8 @@ from uuid import UUID
 
 from yt_dlp import YoutubeDL
 
+from app.core.config import get_settings
+
 
 def safe_filename(value: str, max_length: int = 150) -> str:
     cleaned = "".join(char for char in value if char.isalnum() or char in " ._-()").strip(" .")
@@ -62,6 +64,11 @@ def download_from_catalog(
             ),
             "progress_hooks": [on_progress],
             "postprocessor_hooks": [lambda _: progress(97, "Finalizing file")],
+            "extractor_args": {
+                "youtubepot-bgutilhttp": {
+                    "base_url": get_settings().ytdlp_pot_provider_url,
+                },
+            },
         }
         if output_format != "mp4":
             options["postprocessors"] = [{

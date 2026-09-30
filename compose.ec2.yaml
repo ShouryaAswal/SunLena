@@ -61,6 +61,7 @@ services:
       SUNLENA_MEDIA_ROOT: /var/lib/sunlena/media
       SUNLENA_MEDIA_MAX_FILE_BYTES: 157286400
       SUNLENA_MEDIA_MAX_USER_BYTES: 524288000
+      SUNLENA_YTDLP_POT_PROVIDER_URL: http://bgutil-provider:4416
     volumes:
       - media_data:/var/lib/sunlena/media
     depends_on:
@@ -68,7 +69,18 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
+      bgutil-provider:
+        condition: service_started
     command: ["python", "-m", "app.modules.media.worker"]
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  bgutil-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:2.0.0-deno
+    restart: unless-stopped
     read_only: true
     tmpfs:
       - /tmp

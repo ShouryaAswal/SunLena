@@ -12,7 +12,8 @@ dependencies = [
   "alembic>=1.14,<2.0",
   "httpx>=0.28,<1.0",
   "firebase-admin>=6.6,<8.0",
-  "yt-dlp[default]>=2026.3.13",
+  "yt-dlp[default]==2026.8.19",
+  "bgutil-ytdlp-pot-provider==2.0.0",
   "pydub>=0.25.1",
   "python-multipart>=0.0.20,<1.0",
 ]

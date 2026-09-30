@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     media_max_file_bytes: int = 157286400
     media_max_user_bytes: int = 524288000
     media_signing_secret: str = "local-only-change-me"
+    ytdlp_pot_provider_url: str = "http://bgutil-provider:4416"
 
     model_config = SettingsConfigDict(
         env_prefix="SUNLENA_",
