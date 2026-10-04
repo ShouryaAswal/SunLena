@@ -14,6 +14,7 @@ This folder is the product, architecture, and deployment blueprint for rebuildin
 8. [EC2 VPC, security group, and Name.com runbook](08-ec2-domain-runbook.md)
 9. [Decision log](09-decision-log.md)
 10. [Run locally and deploy to EC2](10-local-and-ec2-walkthrough.md)
+11. [Media extraction backends](11-media-extractors.md)
 
 The referenced SunLeo work and source repository informed this rebuild: React, FastAPI, Firebase auth/playlists, iTunes/Last.fm/YouTube metadata and thumbnails, and an in-memory conversion workflow. SunLena keeps clear backend module boundaries while deploying as one API plus a separate media worker on one EC2 host for the first AWS release. Lightsail is no longer the recommended first host because its fixed bundles do not match the user's price expectation.
 
@@ -21,7 +22,7 @@ Start with a modular monolith plus a separate worker process, not deployed micro
 
 ## Implemented foundation
 
-The repository now includes Apple catalog search/previews, Firebase token verification, PostgreSQL migrations, private playlists with unlisted share links, reviews, editorial mood discovery, persistent yt-dlp/FFmpeg download jobs, a private media volume, playlist-aware audio playback, and an audio editor. Google sign-in requires local Firebase web settings plus an Admin service-account file described in the root README. This is an early working foundation, not yet complete SunLeo feature parity; inspect the original SunLeo repo before declaring parity.
+The repository now includes Apple catalog search/previews, Firebase token verification, PostgreSQL migrations, private playlists with unlisted share links, reviews, editorial mood discovery, persistent yt-dlp/Cobalt media jobs, a private media volume, playlist-aware audio playback, and an audio editor. Google sign-in requires local Firebase web settings plus an Admin service-account file described in the root README. This is an early working foundation, not yet complete SunLeo feature parity; inspect the original SunLeo repo before declaring parity.
 
 SunLeo's local environment values have been copied into the ignored SunLena `.env`, with its Firebase client names mapped to SunLena's Vite variables. The Firebase Admin JSON is in ignored `.secrets/firebase-admin.json`. Legacy provider keys are preserved locally, but they are not automatically wired into SunLena or required by the EC2 deployment.
 

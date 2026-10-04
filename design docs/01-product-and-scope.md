@@ -39,7 +39,7 @@ SunLena is a polished music discovery and personal-library site for family and f
 
 Later: durable per-user storage quotas and cleanup UI, source candidate chooser, job cancellation/retries, preview/download matching quality signals, collaborative playlists, follows, import/export, notifications, object storage/CDN and IaC/CI/CD.
 
-Not initially: a public streaming catalog, arbitrary URL ingestion (including direct YouTube-link downloading), public social graph/messaging, ads/subscriptions, Kubernetes/service mesh/multi-region, or immediate serverless conversion. Revisit URL ingestion only for authorized sources after adding a source allowlist, rights checks and SSRF protections.
+Not initially: a public streaming catalog, public social graph/messaging, ads/subscriptions, Kubernetes/service mesh/multi-region, or immediate serverless conversion. The current media flow accepts direct public URLs only from an explicit supported-host allowlist; keep SSRF checks and rights/authorization limits in place.
 
 ## Zero-cost constraint
 Treat zero spend as a budget target with a stop condition. A domain may have renewal costs even if initially bundled; VM, snapshots, storage, transfer and optional services may be charged. Verify current pricing and terms. Before AWS resources, estimate region-specific monthly cost, set a budget alert, record a maximum acceptable spend, and know how to delete it. If the limit is literally ₹0, stay local or use a verified free offer with limits understood. AWS alerts notify; they do not enforce a hard cap.

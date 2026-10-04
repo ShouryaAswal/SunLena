@@ -16,6 +16,7 @@
 | Motion | Purposeful, reduced-motion-aware | Heavy scroll storytelling may hurt usability/performance. |
 | IaC | Console-built EC2/VPC first for learning, then Terraform/CDK | Earlier if recreations or frequent changes; document every console choice now. |
 | Zero-cost | Minimize/disclose spend | Never claim public AWS is $0; verify price before provisioning. |
+| Media extraction | yt-dlp + bgutil PO tokens for YouTube and catalog jobs, even when Cobalt handles other hosts (`SUNLENA_YOUTUBE_EXTRACTOR`) | Cobalt returned empty YouTube tunnels for videos that need video-bound PO tokens (Oct 2026). Revisit if Cobalt gets a session server that fits the no-browser-automation constraint, or if yt-dlp is blocked on the host IP. |
 
 ## ADR template
 ```text

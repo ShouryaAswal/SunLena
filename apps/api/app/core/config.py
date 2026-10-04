@@ -1,5 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +18,19 @@ class Settings(BaseSettings):
     media_max_user_bytes: int = 524288000
     media_signing_secret: str = "local-only-change-me"
     ytdlp_pot_provider_url: str = "http://bgutil-provider:4416"
+    # Containers run with a read-only root filesystem; /tmp is a tmpfs.
+    ytdlp_cache_dir: str = "/tmp/yt-dlp-cache"
+    media_extractor: Literal["yt-dlp", "cobalt"] = "yt-dlp"
+    # YouTube (direct URLs and catalog searches) needs PO tokens that only the
+    # yt-dlp + bgutil pipeline supplies; Cobalt returns empty tunnels for many
+    # videos without a browser-based session server. Only applies when
+    # media_extractor is "cobalt".
+    youtube_extractor: Literal["yt-dlp", "cobalt"] = "yt-dlp"
+    cobalt_api_base_url: str = "http://cobalt:9000/"
+    cobalt_api_token: SecretStr | None = None
+    cobalt_auth_scheme: Literal["Api-Key", "Bearer"] = "Api-Key"
+    cobalt_request_timeout_seconds: float = 30
+    cobalt_download_timeout_seconds: float = 180
 
     model_config = SettingsConfigDict(
         env_prefix="SUNLENA_",

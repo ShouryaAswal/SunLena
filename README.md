@@ -4,7 +4,7 @@ SunLena is a new, learning-first rebuild of SunLeo: a music discovery and playli
 
 ## Current status
 
-The current flows include Apple catalog search/previews, Firebase Google sign-in, PostgreSQL playlists/reviews, editorial discovery, persistent yt-dlp/FFmpeg download jobs, playback, and a bounded audio editor. Report/moderation and account deletion are not implemented. This remains a first feature-complete slice, not a verified feature-parity replacement for SunLeo.
+The current flows include Apple catalog search/previews, Firebase Google sign-in, PostgreSQL playlists/reviews, editorial discovery, persistent yt-dlp/Cobalt download jobs, playback, and a bounded audio editor. Report/moderation and account deletion are not implemented. This remains a first feature-complete slice, not a verified feature-parity replacement for SunLeo.
 
 ## Start locally
 
@@ -15,8 +15,10 @@ Requirements: Docker Desktop with Compose v2.
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 New-Item -ItemType Directory -Force .secrets
-docker compose up --build -d
+docker compose -f compose.yaml -f compose.cobalt.yaml up --build -d
 ```
+
+This starts local development with the Cobalt extractor enabled. To use the base yt-dlp pipeline instead, run `docker compose up --build -d`.
 
 Open <http://localhost:5173>. API liveness is at <http://localhost:8000/health/live> and readiness at <http://localhost:8000/health/ready>.
 
@@ -27,7 +29,9 @@ Open <http://localhost:5173>. API liveness is at <http://localhost:8000/health/l
 3. Create a Firebase Admin service-account key and save it as `.secrets/firebase-admin.json`. This key is privileged: do not commit or share it. In a deployed environment, use a managed secret store instead of copying it to the image.
 4. Restart Compose after changing `.env` so Vite receives the browser config.
 
-Search uses Apple's public iTunes Search endpoint and stores normalized track references and optional preview URLs in PostgreSQL. Quick download queues a title/artist search using yt-dlp, then FFmpeg extracts the selected format. YouTube's current bot checks can require Proof of Origin (PO) tokens: the API/worker image pins yt-dlp and the `bgutil-ytdlp-pot-provider` plugin, and Compose starts the matching provider sidecar. The worker calls that sidecar on the private Compose network; it has no published host port. The image also includes yt-dlp's `default` extra (`yt-dlp-ejs`), Deno, and FFmpeg. A separate single-concurrency worker updates persistent PostgreSQL job status and stores owner-private files on a shared named volume. The API limits jobs to 30 minutes/150 MB each, two active jobs per user, and 500 MB of completed files per user. The Studio editor trims and applies fades/EQ/volume/speed, then exports a new file without replacing the original.
+Search uses Apple's public iTunes Search endpoint and stores normalized track references and optional preview URLs in PostgreSQL. The homepage accepts either catalog search or a supported public media URL. Jobs use the existing persistent worker and private media volume; `SUNLENA_MEDIA_EXTRACTOR` selects `yt-dlp` (default) or Cobalt. With Cobalt selected, YouTube URLs and catalog downloads still go through yt-dlp with bgutil PO tokens (`SUNLENA_YOUTUBE_EXTRACTOR=yt-dlp`, the default), because Cobalt returns empty tunnels for YouTube videos that require video-bound PO tokens. Other URLs (Instagram, TikTok, …) go to Cobalt. The optional Cobalt deployment is in `compose.cobalt.yaml`; run it with `docker compose -f compose.yaml -f compose.cobalt.yaml up --build -d`. It adds a private Cobalt API with no host-published port. For details on formats, Cobalt API constraints, environment variables, tests, troubleshooting, and EC2 design, see [media extraction backends](design%20docs/11-media-extractors.md).
+
+The yt-dlp pipeline remains installed and functional: the API/worker image pins yt-dlp and `bgutil-ytdlp-pot-provider`, uses yt-dlp's `default` extra (`yt-dlp-ejs`), Deno, and FFmpeg, and the base Compose stack starts its provider sidecar. The worker updates persistent PostgreSQL job status and stores owner-private files on the existing shared named volume. The API limits jobs to 30 minutes/150 MB each, two active jobs per user, and 500 MB of completed files per user. Cobalt handles requested extraction/conversion; SunLena's existing FFmpeg is used only when needed for output normalization and by the Studio editor.
 
 To reproduce the complete media setup locally, use `docker compose up --build -d`; Compose builds the pinned API/worker image and starts the PO-token provider alongside the worker. For an EC2 rollout, rebuild and recreate the worker and provider with `sudo docker compose -f compose.ec2.yaml up -d --build worker bgutil-provider` (then inspect `ps` and logs). Do not use `down -v`; the media volume remains intact. To diagnose YouTube extraction, run this from the worker container, replacing the sample query with a permitted public video:
 
@@ -71,4 +75,4 @@ Start with [design docs/README.md](design%20docs/README.md) for product scope, a
 - Start as a modular monolith plus a separate worker process, not a fleet of microservices.
 - Do not commit secrets or user media.
 - Public AWS hosting is not guaranteed to cost zero; check current pricing before provisioning.
-- The media worker only searches by a catalog track's title/artist; direct YouTube-link downloading and arbitrary URL routes are not supported. Do not expose arbitrary URL download routes or the private media volume.
+- The homepage supports catalog search and validated public media URLs. Direct URL requests are restricted to an explicit platform-host allowlist; do not widen it without considering SSRF protections. Never expose the private media volume.

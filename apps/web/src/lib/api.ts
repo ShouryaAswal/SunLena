@@ -29,7 +29,7 @@ export type Review = { id: string; rating: number; body?: string | null; created
 export type ReviewList = { count: number; average_rating: number | null; reviews: Review[] }
 export type DiscoverySection = { id: string; title: string; query: string; status: string; tracks: SearchResult[] }
 export type MediaJob = {
-  id: string; track_id: string; status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  id: string; track_id: string | null; status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
   stage: string; progress: number; output_format: string; bitrate: string
   title: string | null; artist: string | null; source_title: string | null
   file_name: string | null; file_size: number | null; error: string | null
@@ -105,8 +105,8 @@ export function getMediaJobs(token: string): Promise<MediaJob[]> {
   return request('/api/v1/media/jobs', token)
 }
 
-export function createMediaJob(token: string, trackId: string, outputFormat = 'mp3', bitrate = '192'): Promise<MediaJob> {
-  return request('/api/v1/media/jobs', token, { method: 'POST', body: JSON.stringify({ track_id: trackId, output_format: outputFormat, bitrate }) })
+export function createMediaJob(token: string, source: { track_id: string } | { source_url: string }, outputFormat = 'auto', bitrate = '192'): Promise<MediaJob> {
+  return request('/api/v1/media/jobs', token, { method: 'POST', body: JSON.stringify({ ...source, output_format: outputFormat, bitrate }) })
 }
 
 export async function getMediaFile(token: string, jobId: string, inline = false): Promise<Blob> {

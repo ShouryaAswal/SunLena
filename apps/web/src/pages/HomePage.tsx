@@ -37,6 +37,9 @@ export default function HomePage() {
   const player = useAudioPlayer()
   const [activeTab, setActiveTab] = useState<'discover' | 'downloads' | 'editor'>('discover')
   const [query, setQuery] = useState('')
+  const [downloadMode, setDownloadMode] = useState<'search' | 'url'>('search')
+  const [mediaUrl, setMediaUrl] = useState('')
+  const [urlSubmitting, setUrlSubmitting] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [searchField, setSearchField] = useState('all')
   const [response, setResponse] = useState<SearchResponse | null>(null)
@@ -65,7 +68,7 @@ export default function HomePage() {
   const [savePlaylistId, setSavePlaylistId] = useState('')
   const [pendingSaveTrack, setPendingSaveTrack] = useState<SearchResult | null>(null)
   const [downloadingTrackId, setDownloadingTrackId] = useState('')
-  const [downloadFormat, setDownloadFormat] = useState('mp3')
+  const [downloadFormat, setDownloadFormat] = useState('auto')
   const [downloadBitrate, setDownloadBitrate] = useState('192')
   const [editorJobId, setEditorJobId] = useState('')
   const controller = useRef<AbortController | null>(null)
@@ -236,12 +239,30 @@ export default function HomePage() {
     if (!token) return setNotice('Your sign-in expired. Please sign in again.')
     setDownloadingTrackId(track.id)
     try {
-      await createMediaJob(token, track.id, downloadFormat, downloadBitrate)
+      await createMediaJob(token, { track_id: track.id }, downloadFormat, downloadBitrate)
       setActiveTab('downloads')
       setNotice(`Finding a YouTube match for “${track.title}”.`)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not start this download.')
     } finally { setDownloadingTrackId('') }
+  }
+
+  async function submitUrlDownload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!user) return setNotice('Sign in with Google in the top-right corner to download media.')
+    const token = await getToken()
+    if (!token) return setNotice('Your sign-in expired. Please sign in again.')
+    setUrlSubmitting(true)
+    try {
+      await createMediaJob(token, { source_url: mediaUrl.trim() }, downloadFormat, downloadBitrate)
+      setMediaUrl('')
+      setActiveTab('downloads')
+      setNotice('Your URL download has been added to the queue.')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not start this download.')
+    } finally {
+      setUrlSubmitting(false)
+    }
   }
 
   async function playPlaylist(playlist: Playlist, shuffle = false) {
@@ -406,12 +427,25 @@ export default function HomePage() {
           <p className="eyebrow"><span className="eyebrow-line" />A little more room for music</p>
           <h1>Find the song<br />you <em>feel</em> like.</h1>
           <p className="hero-description">A thoughtful place to search, collect, and come back to the music that stays with you.</p>
-          <form className="search-form" onSubmit={submitSearch} role="search">
+          <div className="download-mode" role="tablist" aria-label="Choose download input">
+            <button type="button" role="tab" aria-selected={downloadMode === 'search'} className={downloadMode === 'search' ? 'selected' : ''} onClick={() => setDownloadMode('search')}>Search music</button>
+            <button type="button" role="tab" aria-selected={downloadMode === 'url'} className={downloadMode === 'url' ? 'selected' : ''} onClick={() => setDownloadMode('url')}>Use a media URL</button>
+          </div>
+          {downloadMode === 'search' ? <form className="search-form" onSubmit={submitSearch} role="search">
             <Search size={20} aria-hidden="true" />
             <label className="sr-only" htmlFor="music-search">Search songs, artists, or albums</label>
             <input id="music-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Songs, artists, albums…" autoComplete="off" />
             <button type="submit" aria-label="Search music" disabled={loading}><ArrowRight size={20} /></button>
-          </form>
+          </form> : <form className="search-form" onSubmit={(event) => void submitUrlDownload(event)}>
+            <label className="sr-only" htmlFor="media-url">Paste a public media URL</label>
+            <input id="media-url" type="url" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="Paste a YouTube, TikTok, Vimeo, or other supported URL" required />
+            <button type="submit" aria-label="Download media URL" disabled={urlSubmitting}><Download size={18} /></button>
+          </form>}
+          <details className="download-settings">
+            <summary>Advanced download settings</summary>
+            <div className="url-download-options"><label>Output format<select value={downloadFormat} onChange={(event) => setDownloadFormat(event.target.value)}><option value="auto">Keep source format</option><option value="mp3">MP3 audio</option><option value="m4a">M4A audio</option><option value="opus">Opus audio</option><option value="ogg">OGG audio</option><option value="wav">WAV audio</option><option value="mp4">MP4 video</option></select></label>{downloadFormat !== 'auto' && <label>Quality<select value={downloadBitrate} onChange={(event) => setDownloadBitrate(event.target.value)}><option value="128">128 kbps</option><option value="192">192 kbps</option><option value="256">256 kbps</option><option value="320">320 kbps</option></select></label>}</div>
+            <p>Keep source format uses Cobalt’s defaults; yt-dlp keeps its MP3 default. An explicit format is converted with FFmpeg.</p>
+          </details>
           <div className="search-underbar"><button className="advanced-toggle" type="button" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen((open) => !open)}>{advancedOpen ? 'Hide search options' : 'Advanced search'} <span>{advancedOpen ? '−' : '+'}</span></button><p className="search-hint">Search Apple’s music catalog. No sign-in needed.</p></div>
           {advancedOpen && <div className="advanced-search"><label htmlFor="search-field">Search in</label><select id="search-field" value={searchField} onChange={(event) => setSearchField(event.target.value)}><option value="all">Song, artist, or album</option><option value="song">Song title</option><option value="artist">Artist</option><option value="album">Album</option></select><span>Explicit results are filtered out for family-friendly browsing.</span><button className="advanced-submit" type="button" disabled={loading || !query.trim()} onClick={() => void runSearch(query, searchField)}>Search this field <ArrowRight size={14} /></button></div>}
           </div>
@@ -431,7 +465,7 @@ export default function HomePage() {
         {loading && <div className="search-state"><span className="spinner" /> Searching the music catalog…</div>}
         {searchError && <div className="search-state search-error" role="alert">{searchError}</div>}
         {response && <>
-          <div className="section-heading result-heading"><div><p className="eyebrow">Apple Music catalog</p><h2>Results for “{response.query}”</h2></div><div className="result-tools"><span className="result-count">{response.results.length} tracks</span><label>Quick download format<select value={downloadFormat} onChange={(event) => { const format = event.target.value; setDownloadFormat(format); if (format === 'mp3' && downloadBitrate === '256') setDownloadBitrate('192'); if ((format === 'm4a' || format === 'opus') && downloadBitrate === '320') setDownloadBitrate('192') }}><option value="mp3">MP3</option><option value="m4a">M4A</option><option value="opus">Opus</option><option value="mp4">MP4 video</option></select></label>{downloadFormat !== 'mp4' && <label>Quality<select value={downloadBitrate} onChange={(event) => setDownloadBitrate(event.target.value)}><option value="128">128 kbps</option><option value="192">192 kbps</option><option value="256" disabled={downloadFormat === 'mp3'}>256 kbps</option><option value="320" disabled={downloadFormat !== 'mp3'}>320 kbps</option></select></label>}</div></div>
+          <div className="section-heading result-heading"><div><p className="eyebrow">Apple Music catalog</p><h2>Results for “{response.query}”</h2></div><div className="result-tools"><span className="result-count">{response.results.length} tracks · {downloadFormat === 'auto' ? 'source format' : downloadFormat.toUpperCase()}</span></div></div>
           {response.results.length ? <div className="track-list">{response.results.map((track) => <article className="track-row" key={track.id}>
             <Artwork track={track} /><div className="track-main"><h3>{track.title}</h3><p>{track.artist}{track.album ? ` · ${track.album}` : ''}</p><span className="track-source">APPLE MUSIC CATALOG</span></div>
             <span className="track-duration">{formatDuration(track.duration_ms)}</span>

@@ -1,96 +1,73 @@
-from __future__ import annotations
+"""Shared helpers for the media processing pipeline."""
 
-import shutil
-import tempfile
-import time
+import subprocess
 from pathlib import Path
-from typing import Callable
-from uuid import UUID
-
-from yt_dlp import YoutubeDL
-
-from app.core.config import get_settings
 
 
 def safe_filename(value: str, max_length: int = 150) -> str:
     cleaned = "".join(char for char in value if char.isalnum() or char in " ._-()").strip(" .")
-    return (cleaned[:max_length] or "sunlena-track")
+    return cleaned[:max_length] or "sunlena-track"
 
 
-def download_from_catalog(
-    job_id: UUID,
-    owner_id: UUID,
-    title: str,
-    artist: str,
-    output_format: str,
-    bitrate: str,
-    media_root: Path,
-    max_file_bytes: int,
-    progress: Callable[[int, str], None],
-) -> tuple[Path, str, str]:
-    """Resolve one catalog item with yt-dlp search and convert it with FFmpeg."""
-    owner_dir = media_root / str(owner_id)
-    owner_dir.mkdir(parents=True, exist_ok=True)
-    query = f"ytsearch1:{title} {artist}"
-    with tempfile.TemporaryDirectory(prefix=f"{job_id}-", dir=owner_dir) as scratch:
-        scratch_dir = Path(scratch)
-        last_update = [0.0]
+def normalize_cobalt_media(source: Path, output_format: str, bitrate: str,
+                           scratch_dir: Path) -> Path:
+    """Transcode Cobalt's auto-selected media only when a target was requested."""
+    if output_format == "auto":
+        return source
 
-        def on_progress(data: dict) -> None:
-            if data.get("status") == "downloading":
-                total = data.get("total_bytes") or data.get("total_bytes_estimate")
-                percent = int(float(data.get("downloaded_bytes", 0)) * 100 / total) if total else 0
-                now = time.monotonic()
-                if now - last_update[0] >= 1.5:
-                    progress(min(94, max(0, percent)), "Downloading source")
-                    last_update[0] = now
-            elif data.get("status") == "finished":
-                progress(96, "Converting audio")
-
-        options: dict = {
-            "format": "best[ext=mp4]" if output_format == "mp4" else "bestaudio/best",
-            "outtmpl": str(scratch_dir / "source.%(ext)s"),
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": True,
-            "socket_timeout": 20,
-            "retries": 2,
-            "extractor_retries": 2,
-            "max_filesize": max_file_bytes,
-            "match_filter": lambda info, *, incomplete: (
-                "Source is longer than SunLena's 30-minute limit"
-                if info.get("duration") and info["duration"] > 1800
-                else None
-            ),
-            "progress_hooks": [on_progress],
-            "postprocessor_hooks": [lambda _: progress(97, "Finalizing file")],
-            "extractor_args": {
-                "youtubepot-bgutilhttp": {
-                    "base_url": get_settings().ytdlp_pot_provider_url,
-                },
-            },
+    target = scratch_dir / f"normalized.{output_format}"
+    command = ["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(source)]
+    if output_format == "mp4":
+        command += [
+            "-map", "0:v?", "-map", "0:a?", "-sn", "-dn",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-c:a", "aac", "-b:a", f"{bitrate}k", "-movflags", "+faststart",
+        ]
+    else:
+        command += ["-vn"]
+        codecs = {
+            "mp3": ["-c:a", "libmp3lame", "-b:a", f"{bitrate}k"],
+            "m4a": ["-c:a", "aac", "-b:a", f"{bitrate}k"],
+            "opus": ["-c:a", "libopus", "-b:a", f"{bitrate}k"],
+            "ogg": ["-c:a", "libvorbis", "-b:a", f"{bitrate}k"],
+            "wav": ["-c:a", "pcm_s16le"],
         }
-        if output_format != "mp4":
-            options["postprocessors"] = [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": output_format,
-                "preferredquality": bitrate,
-            }, {"key": "FFmpegMetadata"}]
+        codec = codecs.get(output_format)
+        if codec is None:
+            raise RuntimeError("The selected output format is not supported.")
+        command += codec
+    command.append(str(target))
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("FFmpeg timed out while converting the selected format.") from exc
+    if result.returncode or not target.is_file() or not target.stat().st_size:
+        detail = " ".join((result.stderr or "").split())[:180]
+        raise RuntimeError(f"FFmpeg could not convert the media to {output_format.upper()}: {detail}")
+    return target
 
-        with YoutubeDL(options) as ydl:
-            result = ydl.extract_info(query, download=True)
-            info = (result.get("entries") or [result])[0]
-            source_title = str(info.get("title") or title)[:500]
-            video_id = str(info.get("id") or job_id)
 
-        candidates = [path for path in scratch_dir.glob("*") if path.is_file()]
-        expected_ext = "mp4" if output_format == "mp4" else output_format
-        output = next((path for path in candidates if path.suffix.lower() == f".{expected_ext}"), None)
-        if output is None:
-            raise RuntimeError("The source could not be converted to the selected format.")
-        if output.stat().st_size > max_file_bytes:
-            raise RuntimeError("The converted file exceeds the 150 MB limit.")
-
-        final_path = owner_dir / f"{job_id}.{expected_ext}"
-        shutil.move(str(output), final_path)
-        return final_path, source_title, video_id
+def detect_media_extension(format_name: str, streams: list[dict], fallback: str) -> str:
+    """Map FFprobe's detected container/codecs to a useful file extension."""
+    names = set(format_name.lower().split(","))
+    codecs = {str(stream.get("codec_name", "")).lower() for stream in streams}
+    has_video = any(stream.get("codec_type") == "video" for stream in streams)
+    if "mp3" in names:
+        return "mp3"
+    if "flac" in names:
+        return "flac"
+    if "wav" in names or "wav" in codecs:
+        return "wav"
+    if "ogg" in names:
+        return "opus" if "opus" in codecs else "ogg"
+    if "webm" in names:
+        return "webm"
+    if "matroska" in names:
+        return "mkv"
+    if names.intersection({"mov", "mp4", "m4a", "3gp", "3g2", "mj2"}):
+        return "mp4" if has_video else "m4a"
+    if "adts" in names or "aac" in names:
+        return "aac"
+    # Preserve Cobalt's sanitized filename extension for other FFprobe-readable
+    # containers, rather than rejecting formats Cobalt adds in the future.
+    return fallback if fallback.isalnum() and len(fallback) <= 8 else "bin"

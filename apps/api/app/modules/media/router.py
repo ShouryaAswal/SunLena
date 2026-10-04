@@ -28,8 +28,9 @@ ACTIVE_STATUSES = ("queued", "running")
 
 def _serialize(job: MediaJob) -> dict:
     return {
-        "id": str(job.id), "track_id": str(job.track_id), "status": job.status,
-        "stage": job.stage, "progress": job.progress, "output_format": job.output_format,
+        "id": str(job.id), "track_id": str(job.track_id) if job.track_id else None,
+        "status": job.status, "stage": job.stage, "progress": job.progress,
+        "output_format": job.output_format,
         "bitrate": job.bitrate, "title": job.title, "artist": job.artist,
         "source_title": job.source_title, "file_name": job.file_name,
         "file_size": job.file_size, "error": job.error,
@@ -77,8 +78,8 @@ def get_job(job_id: UUID, db: Session = Depends(get_db),
 @router.post("/jobs", status_code=202)
 def create_job(payload: DownloadCreate, db: Session = Depends(get_db),
                user: User = Depends(get_current_user)) -> dict:
-    track = db.get(Track, payload.track_id)
-    if track is None:
+    track = db.get(Track, payload.track_id) if payload.track_id else None
+    if payload.track_id and track is None:
         raise HTTPException(status_code=404, detail="Search for this track again before downloading it.")
     active = db.scalar(select(func.count()).select_from(MediaJob).where(
         MediaJob.owner_id == user.id, MediaJob.status.in_(ACTIVE_STATUSES))) or 0
@@ -89,8 +90,9 @@ def create_job(payload: DownloadCreate, db: Session = Depends(get_db),
     settings = get_settings()
     if used_bytes + (active + 1) * settings.media_max_file_bytes > settings.media_max_user_bytes:
         raise HTTPException(status_code=413, detail="Your private library is full. Remove a download before adding another.")
-    job = MediaJob(owner_id=user.id, track_id=track.id, title=track.title,
-                   artist=track.artist, output_format=payload.output_format, bitrate=payload.bitrate)
+    job = MediaJob(owner_id=user.id, track_id=track.id if track else None,
+                   source_url=payload.source_url, title=track.title if track else "Media URL download",
+                   artist=track.artist if track else "", output_format=payload.output_format, bitrate=payload.bitrate)
     db.add(job)
     db.commit()
     db.refresh(job)

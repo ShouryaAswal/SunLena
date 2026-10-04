@@ -1,0 +1,58 @@
+# Optional overlay: docker compose -f compose.yaml -f compose.cobalt.yaml up --build
+services:
+  worker:
+    environment:
+      SUNLENA_MEDIA_EXTRACTOR: cobalt
+      # YouTube needs PO tokens that Cobalt cannot obtain without a browser
+      # session server; keep YouTube URLs and catalog searches on yt-dlp.
+      SUNLENA_YOUTUBE_EXTRACTOR: ${SUNLENA_YOUTUBE_EXTRACTOR:-yt-dlp}
+      SUNLENA_COBALT_API_BASE_URL: ${SUNLENA_COBALT_API_BASE_URL:-http://cobalt:9000/}
+      SUNLENA_COBALT_API_TOKEN: ${SUNLENA_COBALT_API_TOKEN:-}
+      SUNLENA_COBALT_AUTH_SCHEME: ${SUNLENA_COBALT_AUTH_SCHEME:-Api-Key}
+      SUNLENA_COBALT_REQUEST_TIMEOUT_SECONDS: ${SUNLENA_COBALT_REQUEST_TIMEOUT_SECONDS:-30}
+      SUNLENA_COBALT_DOWNLOAD_TIMEOUT_SECONDS: ${SUNLENA_COBALT_DOWNLOAD_TIMEOUT_SECONDS:-180}
+    networks:
+      - default
+      - cobalt_internal
+    depends_on:
+      cobalt:
+        condition: service_healthy
+
+  cobalt:
+    image: ghcr.io/imputnet/cobalt:11.7.1-a636575@sha256:63186dd68afd57ce3bb1f62cc4c139f5fa95b9c3e87a3cf5c6e4c7a570523f62
+    init: true
+    environment:
+      # Cobalt embeds this URL in tunnel responses. Keep it on the Compose
+      # network: the worker can reach it, and no public host port is needed.
+      API_URL: ${SUNLENA_COBALT_API_BASE_URL:-http://cobalt:9000/}
+      API_PORT: 9000
+      API_INSTANCE_COUNT: ${COBALT_API_INSTANCE_COUNT:-1}
+      API_AUTH_REQUIRED: "${COBALT_API_AUTH_REQUIRED:-false}"
+      API_KEY_URL: ${COBALT_API_KEY_URL:-}
+      FORCE_LOCAL_PROCESSING: never
+      TUNNEL_LIFESPAN: ${COBALT_TUNNEL_LIFESPAN:-90}
+      DURATION_LIMIT: ${COBALT_DURATION_LIMIT:-1800}
+    expose:
+      - "9000"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - cobalt_internal
+      - cobalt_egress
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9000/').then(r=>process.exit(r.status < 500 ? 0 : 1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+networks:
+  cobalt_internal:
+    internal: true
+  cobalt_egress:
+    # This network exists only for Cobalt's required outbound platform/CDN access.
+    driver: bridge
